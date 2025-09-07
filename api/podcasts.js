@@ -18,8 +18,27 @@ export default async function handler(req, res) {
           offset = 0, 
           search, 
           podcast_name,
-          group_by_show = 'false'
+          group_by_show = 'false',
+          debug_shows = 'false'
         } = req.query;
+
+        // Debug endpoint to see all actual show names in database
+        if (debug_shows === 'true') {
+          const { data: allShows, error: debugError } = await supabase
+            .from('podcasts')
+            .select('podcast_name')
+            .order('podcast_name');
+          
+          if (debugError) throw debugError;
+          
+          const uniqueShows = [...new Set(allShows.map(p => p.podcast_name))];
+          return res.status(200).json({ 
+            success: true, 
+            debug: true,
+            unique_show_names: uniqueShows,
+            total_unique_shows: uniqueShows.length
+          });
+        }
 
         let query = supabase
           .from('podcasts')
@@ -30,8 +49,9 @@ export default async function handler(req, res) {
         if (group_by_show && group_by_show !== 'false' && group_by_show !== 'true') {
           // Show mappings for clean URLs - updated with actual database names
           const showMappings = {
-            'PULPMXSHOW': 'PulpMX Show',
-            'STEVEMATTHES': 'The Steve Matthes Show', 
+            'PULPMXSHOW': 'The PulpMX.com Show',
+            'PULPMX': 'The PulpMX.com Show',
+            'STEVEMATTHES': 'The Steve Matthes Show on RacerX', 
             'RERACEABLES': 'The Re-Raceables',
             'MOTO60': 'The Fly Racing Moto:60 Show',
             'VITALMX': 'Vital MX',
