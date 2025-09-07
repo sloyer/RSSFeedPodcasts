@@ -11,6 +11,9 @@
     },
     "api/feeds.js": {
       "maxDuration": 10
+    },
+    "api/historicalSync.js": {
+      "maxDuration": 300
     }
   },
   "crons": [

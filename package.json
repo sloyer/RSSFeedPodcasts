@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "fetch": "node fetchFeeds.js"
+    "fetch": "node fetchFeeds.js",
+    "historical-sync": "node scripts/runHistoricalSync.js",
+    "historical-sync-dry": "node scripts/runHistoricalSync.js --dry-run",
+    "historical-sync-force": "node scripts/runHistoricalSync.js --force"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
