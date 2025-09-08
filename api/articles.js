@@ -25,70 +25,23 @@ export default async function handler(req, res) {
         .select('*')
         .order('published_date', { ascending: false });
 
-      // Clean URL mappings for all motocross sources
+      // Database-driven source filtering
       if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
-        const sourceMappings = {
-          // Major MX News Sites
-          'VITALMX': 'Vital MX',
-          'VITAL': 'Vital MX',
-          'RACERX': 'Racer X',
-          'RACER': 'Racer X',
-          'RACERXONLINE': 'Racer X',
-          'MOTOCROSSACTION': 'Motocross Action',
-          'MXA': 'Motocross Action',
-          'MXACTION': 'Motocross Action',
-          'TRANSWORLD': 'Transworld MX',
-          'TRANSWORLDMX': 'Transworld MX',
-          'TWMX': 'Transworld MX',
-          'CYCLENEWS': 'Cycle News',
-          'DIRTBIKEMAGAZINE': 'Dirt Bike Magazine',
-          'DIRTBIKE': 'Dirt Bike Magazine',
-          'DIRTBIKETEST': 'Dirt Bike Test',
-          'PULPMX': 'PulpMX',
-          
-          // International MX Sites
-          'MXLARGE': 'MX Large',
-          'MXVICE': 'MX Vice',
-          'GATEDROP': 'GateDrop',
-          'MOTOONLINE': 'MotoOnline',
-          'DIRTHUB': 'DirtHub',
-          
-          // Community/Specialty Sites
-          'SWAPMOTO': 'Swap Moto Live',
-          'SWAPBROS': 'Swap Moto Live',
-          'SWAPMOTOLIVE': 'Swap Moto Live',
-          'MOTOXADDICTS': 'MotoXAddicts',
-          'MOTOXPOD': 'MotoXPod',
-          'MOTOCROSSPLANET': 'Motocross Planet',
-          'MXPLANET': 'Motocross Planet',
-          'MOTOCROSSPERFORMANCEMAGAZINE': 'Motocross Performance Magazine',
-          'MXPERFORMANCE': 'Motocross Performance Magazine',
-          
-          // Racing Series Official Sites
-          'SUPERCROSSOFFICIAL': 'Supercross Official',
-          'SUPERCROSS': 'Supercross Official',
-          'SX': 'Supercross Official',
-          'SMXOFFICIAL': 'SMX Official',
-          'SMX': 'SMX Official',
-          'WORLDSUPERCROSSCHAMPIONSHIP': 'World Supercross Championship',
-          'WSX': 'World Supercross Championship',
-          'AUSTRALIANSUPERCROSSOFFICIAL': 'Australian Supercross Official',
-          'AUSSX': 'Australian Supercross Official',
-          
-          // Retailers/Industry
-          'DIRECTMOTOCROSS': 'Direct Motocross',
-          'DIRECTMX': 'Direct Motocross',
-          
-          // Testing/Reviews
-          'KEEFER': 'keefer, Inc Testing',
-          'KEEFERINC': 'keefer, Inc Testing',
-          'KEEFERTESTING': 'keefer, Inc Testing',
-          'KEEFERINCTESTING': 'keefer, Inc Testing',
-        };
+        // Look up the source in motocross_feeds table by clean slug or company name
+        const { data: sourceInfo, error: sourceError } = await supabase
+          .from('motocross_feeds')
+          .select('company_name')
+          .or(`company_name.ilike.%${group_by_source}%`)
+          .eq('is_active', true)
+          .single();
         
-        // Convert to uppercase and look up the actual company name
-        const actualCompanyName = sourceMappings[group_by_source.toUpperCase()] || group_by_source;
-        query = query.eq('company', actualCompanyName);
+        if (sourceError || !sourceInfo) {
+          // Fallback: try direct company match
+          query = query.eq('company', group_by_source);
+        } else {
+          // Use the actual company name from the database
+          query = query.eq('company', sourceInfo.company_name);
+        }
       } else if (company) {
         // Direct company name filter (legacy support)
         query = query.eq('company', company);

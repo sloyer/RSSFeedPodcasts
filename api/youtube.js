@@ -32,53 +32,23 @@ export default async function handler(req, res) {
       cutoffDate.setDate(cutoffDate.getDate() - parseInt(days));
       query = query.gte('published_at', cutoffDate.toISOString());
 
-      // Handle channel filtering with clean URL mappings
+      // Database-driven channel filtering
       if (channel_id) {
-        // Clean URL mappings for YouTube channels (matches article pattern)
-        const channelMappings = {
-          'VITALMX': 'UCCmGhVaQX10ok72CmJMa_oQ',
-          'VITAL': 'UCCmGhVaQX10ok72CmJMa_oQ',
-          'RACERX': 'UCzLDrufzDTIQX_F20r0EiMA',
-          'RACER': 'UCzLDrufzDTIQX_F20r0EiMA',
-          'RACERXONLINE': 'UCzLDrufzDTIQX_F20r0EiMA',
-          'PROMX': 'UCKtQ4DDoVusEa1i_Q8OEyew',
-          'PROMOTO': 'UCKtQ4DDoVusEa1i_Q8OEyew',
-          'PROMOTOCROSS': 'UCKtQ4DDoVusEa1i_Q8OEyew',
-          'SUPERCROSS': 'UCkaNo2FUEWips2z4BkOHl6Q',
-          'SX': 'UCkaNo2FUEWips2z4BkOHl6Q',
-          'MONSTERENERGY': 'UCkaNo2FUEWips2z4BkOHl6Q',
-          'PULPMX': 'UCpMfM2f4b6ehg1H_olAx02Q',
-          'PULP': 'UCpMfM2f4b6ehg1H_olAx02Q',
-          'KEEFER': 'UCZYeudqmABko6_88Isi9JNw',
-          'KEEFERINC': 'UCZYeudqmABko6_88Isi9JNw',
-          'KEEFERTESTING': 'UCZYeudqmABko6_88Isi9JNw',
-          'SWAPMOTO': 'UCvOh-WOBvelVw2akcAdjyMQ',
-          'SWAP': 'UCvOh-WOBvelVw2akcAdjyMQ',
-          'SWAPMOTOLIVE': 'UCvOh-WOBvelVw2akcAdjyMQ',
-          'MXVICE': 'UCxeEsENwOA2ni3hPqJBhYKg',
-          'VICE': 'UCxeEsENwOA2ni3hPqJBhYKg',
-          'GYPSYTALES': 'UCtl-RTKdYdCzf8hUnuGRiBg',
-          'GYPSY': 'UCtl-RTKdYdCzf8hUnuGRiBg',
-          'DIRTBIKE': 'UCeKccRs9icuvfnQ2Z6Yf6gQ',
-          'DIRTBIKEMAG': 'UCeKccRs9icuvfnQ2Z6Yf6gQ',
-          'DIRTBIKEMAGAZINE': 'UCeKccRs9icuvfnQ2Z6Yf6gQ',
-          'MXA': 'UCOvXlniUlngzER5ery9K27w',
-          'MOTOCROSSACTION': 'UCOvXlniUlngzER5ery9K27w',
-          'MXACTION': 'UCOvXlniUlngzER5ery9K27w',
-          'FOX': 'UCRuCx-QoX3PbPaM2NEWw-Tw',
-          'FOXRACING': 'UCRuCx-QoX3PbPaM2NEWw-Tw',
-          'MOTOPLAYGROUND': 'UCKWef39yZsgnP0hytNcWt3A',
-          'PLAYGROUND': 'UCKWef39yZsgnP0hytNcWt3A',
-          'WSX': 'UCz2xUzjvrlvBWmpJAovRtUw',
-          'WORLDSX': 'UCz2xUzjvrlvBWmpJAovRtUw',
-          'WORLDSUPERCROSS': 'UCz2xUzjvrlvBWmpJAovRtUw',
-          'TEAMFRIED': 'UCWZ754dvJICH2H5RvKSbdkg',
-          'FRIED': 'UCWZ754dvJICH2H5RvKSbdkg'
-        };
+        // Look up the channel in youtube_channels table by display name or channel_id
+        const { data: channelInfo, error: channelError } = await supabase
+          .from('youtube_channels')
+          .select('channel_id')
+          .or(`display_name.ilike.%${channel_id}%,channel_id.eq.${channel_id}`)
+          .eq('is_active', true)
+          .single();
         
-        // Convert to uppercase and look up the actual channel ID
-        const actualChannelId = channelMappings[channel_id.toUpperCase()] || channel_id;
-        query = query.eq('channel_id', actualChannelId);
+        if (channelError || !channelInfo) {
+          // Fallback: try direct channel_id match
+          query = query.eq('channel_id', channel_id);
+        } else {
+          // Use the actual channel_id from the database
+          query = query.eq('channel_id', channelInfo.channel_id);
+        }
       }
 
       // Filter by multiple channels (for user preferences)

@@ -45,32 +45,25 @@ export default async function handler(req, res) {
           .select('*')
           .order('podcast_date', { ascending: false });
 
-        // Handle show filtering
+        // Handle show filtering using database-driven approach
         if (group_by_show && group_by_show !== 'false' && group_by_show !== 'true') {
-          // Show mappings for clean URLs - updated with actual database names
-          const showMappings = {
-            'PULPMXSHOW': 'The PulpMX.com Show',
-            'PULPMX': 'The PulpMX.com Show',
-            'STEVEMATTHES': 'The Steve Matthes Show on RacerX', 
-            'RERACEABLES': 'The Re-Raceables',
-            'MOTO60': 'The Fly Racing Moto:60 Show',
-            'VITALMX': 'Vital MX',
-            'GYPSYTALES': 'Gypsy Tales',
-            'TITLE24': 'Title 24 - Villopoto & Carmichael',
-            'VILLOPOTO': 'Title 24 - Villopoto & Carmichael',
-            'CARMICHAEL': 'Title 24 - Villopoto & Carmichael',
-            'RACERX': 'Racer X Podcast',
-            'RACERXPODCAST': 'Racer X Podcast',
-            'SWAPMOTO': 'Swapmoto Live Podcast',
-            'SWAPMOTOLIVE': 'Swapmoto Live Podcast',
-            'ACJB': 'The AC & JB Show',
-            'ACJBSHOW': 'The AC & JB Show'
-          };
+          // First, try to find the feed by clean_slug or display_name
+          const { data: feedInfo, error: feedError } = await supabase
+            .from('rss_feeds')
+            .select('feed_name, display_name')
+            .or(`clean_slug.eq.${group_by_show.toLowerCase()},display_name.ilike.%${group_by_show}%`)
+            .eq('is_active', true)
+            .single();
           
-          const actualShowName = showMappings[group_by_show.toUpperCase()] || group_by_show;
-          query = query.eq('podcast_name', actualShowName);
+          if (feedError || !feedInfo) {
+            // Fallback: try direct podcast_name match
+            query = query.eq('podcast_name', group_by_show);
+          } else {
+            // Use the actual feed_name from the RSS feed
+            query = query.eq('podcast_name', feedInfo.feed_name);
+          }
         } else if (podcast_name) {
-          // Legacy support
+          // Legacy support - direct podcast name
           query = query.eq('podcast_name', podcast_name);
         }
 
