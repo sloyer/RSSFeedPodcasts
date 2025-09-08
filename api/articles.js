@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         const { data: sourceInfo, error: sourceError } = await supabase
           .from('motocross_feeds')
           .select('company_name')
-          .or(`company_name.ilike.%${group_by_source}%`)
+          .or(`clean_slug.eq.${group_by_source.toLowerCase()},company_name.ilike.%${group_by_source}%`)
           .eq('is_active', true)
           .single();
         

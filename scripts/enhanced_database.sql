@@ -1,87 +1,81 @@
 -- Enhanced database schema for dynamic feed management
 
--- Add display fields to all feed tables
+i -- Add display fields to all feed tables
 ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'podcast';
 ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS image_url TEXT;
-ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS clean_slug TEXT;
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS clean_slug TEXT GENERATED ALWAYS AS (
+  LOWER(REGEXP_REPLACE(COALESCE(display_name, feed_name), '[^a-zA-Z0-9]+', '-', 'g'))
+) STORED;
 
--- Add clean_slug to motocross_feeds
-ALTER TABLE motocross_feeds ADD COLUMN IF NOT EXISTS clean_slug TEXT;
-ALTER TABLE motocross_feeds ADD COLUMN IF NOT EXISTS display_name TEXT;
+-- Add clean_slug to motocross_feeds (auto-generated from company_name)
+ALTER TABLE motocross_feeds ADD COLUMN IF NOT EXISTS clean_slug TEXT GENERATED ALWAYS AS (
+  LOWER(REGEXP_REPLACE(company_name, '[^a-zA-Z0-9]+', '-', 'g'))
+) STORED;
 
--- Add clean_slug to youtube_channels  
-ALTER TABLE youtube_channels ADD COLUMN IF NOT EXISTS clean_slug TEXT;
+-- Add clean_slug to youtube_channels (auto-generated from display_name)
+ALTER TABLE youtube_channels ADD COLUMN IF NOT EXISTS clean_slug TEXT GENERATED ALWAYS AS (
+  LOWER(REGEXP_REPLACE(COALESCE(display_name, channel_title), '[^a-zA-Z0-9]+', '-', 'g'))
+) STORED;
 
--- Update existing feeds with display names and slugs
+-- Update existing feeds with display names (clean_slug will be auto-generated)
 UPDATE rss_feeds SET 
   display_name = 'Steve Matthes Show',
-  clean_slug = 'steve-matthes',
   description = 'The Steve Matthes Show on RacerX',
   category = 'podcast'
 WHERE feed_name = 'The Steve Matthes Show';
 
 UPDATE rss_feeds SET 
   display_name = 'PulpMX Show',
-  clean_slug = 'pulpmx-show',
   description = 'The PulpMX.com Show',
   category = 'podcast'
 WHERE feed_name = 'PulpMX Show';
 
 UPDATE rss_feeds SET 
   display_name = 'Re-Raceables',
-  clean_slug = 're-raceables',
   description = 'The Re-Raceables',
   category = 'podcast'
 WHERE feed_name = 'The Re-Raceables';
 
 UPDATE rss_feeds SET 
   display_name = 'Moto:60 Show',
-  clean_slug = 'moto-60',
   description = 'The Fly Racing Moto:60 Show',
   category = 'podcast'
 WHERE feed_name = 'The Fly Racing MOTO:60 Show';
 
 UPDATE rss_feeds SET 
   display_name = 'Vital MX',
-  clean_slug = 'vital-mx',
   description = 'Vital MX Podcast',
   category = 'podcast'
 WHERE feed_name = 'Vital MX';
 
 UPDATE rss_feeds SET 
   display_name = 'Gypsy Tales',
-  clean_slug = 'gypsy-tales',
   description = 'Gypsy Tales Podcast',
   category = 'podcast'
 WHERE feed_name = 'Gypsy Tales';
 
--- Add other feeds
 UPDATE rss_feeds SET 
   display_name = 'Title 24',
-  clean_slug = 'title-24',
   description = 'Title 24 - Villopoto & Carmichael',
   category = 'podcast'
 WHERE feed_name = 'Title 24 - Villopoto & Carmichael';
 
 UPDATE rss_feeds SET 
   display_name = 'Racer X Podcast',
-  clean_slug = 'racer-x',
   description = 'Racer X Podcast',
   category = 'podcast'
 WHERE feed_name = 'Racer X Podcast';
 
 UPDATE rss_feeds SET 
   display_name = 'Swapmoto Live',
-  clean_slug = 'swapmoto-live',
   description = 'Swapmoto Live Podcast',
   category = 'podcast'
 WHERE feed_name = 'Swapmoto Live Podcast';
 
 UPDATE rss_feeds SET 
   display_name = 'AC & JB Show',
-  clean_slug = 'ac-jb-show',
   description = 'The AC & JB Show',
   category = 'podcast'
 WHERE feed_name = 'The AC & JB Show';
@@ -122,7 +116,7 @@ SELECT
   id,
   feed_name as source_name,
   company_name as display_name,
-  LOWER(REPLACE(company_name, ' ', '-')) as clean_slug,
+  clean_slug,
   CONCAT('Articles from ', company_name) as description,
   'article' as category,
   NULL as image_url,
@@ -137,9 +131,9 @@ SELECT
   'youtube' as content_type,
   id,
   channel_title as source_name,
-  display_name,
-  LOWER(REPLACE(display_name, ' ', '-')) as clean_slug,
-  CONCAT('Videos from ', display_name) as description,
+  COALESCE(display_name, channel_title) as display_name,
+  clean_slug,
+  CONCAT('Videos from ', COALESCE(display_name, channel_title)) as description,
   'youtube' as category,
   NULL as image_url,
   is_active,
