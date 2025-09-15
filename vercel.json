@@ -20,6 +20,9 @@
     },
     "api/add-youtube-channel.js": {
       "maxDuration": 30
+    },
+    "api/migrate-youtube.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
