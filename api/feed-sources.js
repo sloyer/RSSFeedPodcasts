@@ -16,24 +16,22 @@ export default async function handler(req, res) {
       
       const feedSources = {};
       
-      // Fetch news feeds (articles) - get actual company names from articles table
+      // Fetch news feeds (articles) - use company_name from motocross_feeds table  
       if (!type || type === 'news') {
-        const { data: companies, error: newsError } = await supabase
-          .from('articles')
-          .select('company')
-          .not('company', 'is', null)
-          .order('company', { ascending: true });
+        const { data: newsFeeds, error: newsError } = await supabase
+          .from('motocross_feeds')
+          .select('id, feed_name, company_name')
+          .eq('is_active', true)
+          .not('company_name', 'is', null)
+          .order('company_name', { ascending: true });
         
         if (newsError) throw newsError;
         
-        // Get unique company names
-        const uniqueCompanies = [...new Set(companies.map(item => item.company))];
-        
-        feedSources.news = uniqueCompanies.map((company, index) => ({
-          id: (index + 1).toString(),
-          name: company,
-          apiCode: company.toUpperCase().replace(/[^A-Z0-9]/g, ''), // Generate API code from actual company name
-          logo: `https://via.placeholder.com/100x100/FF5722/FFFFFF?text=${encodeURIComponent(company.charAt(0))}`,
+        feedSources.news = newsFeeds.map(feed => ({
+          id: feed.id.toString(),
+          name: feed.company_name, // Use company_name which matches articles table
+          apiCode: feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+          logo: `https://via.placeholder.com/100x100/FF5722/FFFFFF?text=${encodeURIComponent(feed.company_name.charAt(0))}`,
           category: 'Motocross News',
           enabled: false, // Default - user will set this
           type: 'news',

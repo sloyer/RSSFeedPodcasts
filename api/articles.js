@@ -25,29 +25,29 @@ export default async function handler(req, res) {
         .select('*')
         .order('published_date', { ascending: false });
 
-      // Direct company name mapping - use actual company names from articles table
+      // Company name mapping using motocross_feeds table
       if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
         try {
-          // Get all unique company names from articles table
-          const { data: companies, error: companyError } = await supabase
-            .from('articles')
-            .select('company')
-            .not('company', 'is', null);
+          // Get company names from motocross_feeds table
+          const { data: feeds, error: feedError } = await supabase
+            .from('motocross_feeds')
+            .select('company_name')
+            .eq('is_active', true)
+            .not('company_name', 'is', null);
           
-          if (companyError) {
-            console.warn(`Error fetching companies for source: ${group_by_source}`, companyError);
+          if (feedError) {
+            console.warn(`Error fetching feeds for source: ${group_by_source}`, feedError);
             query = query.eq('company', group_by_source);
           } else {
             // Find company where generated API code matches the request
-            const uniqueCompanies = [...new Set(companies.map(item => item.company))];
-            const matchingCompany = uniqueCompanies.find(company => {
-              const apiCode = company.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const matchingFeed = feeds.find(feed => {
+              const apiCode = feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
               return apiCode === group_by_source.toUpperCase();
             });
             
-            if (matchingCompany) {
-              // Use the actual company name from articles table
-              query = query.eq('company', matchingCompany);
+            if (matchingFeed) {
+              // Use the actual company name from motocross_feeds table
+              query = query.eq('company', matchingFeed.company_name);
             } else {
               console.warn(`Company not found for api_code: ${group_by_source}`);
               // Fallback to using the provided source code as-is
