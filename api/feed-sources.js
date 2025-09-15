@@ -16,21 +16,24 @@ export default async function handler(req, res) {
       
       const feedSources = {};
       
-      // Fetch news feeds (articles) - using existing fields only
+      // Fetch news feeds (articles) - get actual company names from articles table
       if (!type || type === 'news') {
-        const { data: newsFeeds, error: newsError } = await supabase
-          .from('motocross_feeds')
-          .select('*')
-          .eq('is_active', true)
-          .order('feed_name', { ascending: true });
+        const { data: companies, error: newsError } = await supabase
+          .from('articles')
+          .select('company')
+          .not('company', 'is', null)
+          .order('company', { ascending: true });
         
         if (newsError) throw newsError;
         
-        feedSources.news = newsFeeds.map(feed => ({
-          id: feed.id.toString(),
-          name: feed.feed_name,
-          apiCode: feed.feed_name.toUpperCase().replace(/[^A-Z0-9]/g, ''), // Generate API code from name
-          logo: `https://via.placeholder.com/100x100/FF5722/FFFFFF?text=${encodeURIComponent(feed.feed_name.charAt(0))}`,
+        // Get unique company names
+        const uniqueCompanies = [...new Set(companies.map(item => item.company))];
+        
+        feedSources.news = uniqueCompanies.map((company, index) => ({
+          id: (index + 1).toString(),
+          name: company,
+          apiCode: company.toUpperCase().replace(/[^A-Z0-9]/g, ''), // Generate API code from actual company name
+          logo: `https://via.placeholder.com/100x100/FF5722/FFFFFF?text=${encodeURIComponent(company.charAt(0))}`,
           category: 'Motocross News',
           enabled: false, // Default - user will set this
           type: 'news',
@@ -38,23 +41,26 @@ export default async function handler(req, res) {
         }));
       }
       
-      // Fetch podcast feeds - using existing fields only
+      // Fetch podcast feeds - get actual podcast names from podcasts table
       if (!type || type === 'podcasts') {
-        const { data: podcastFeeds, error: podcastError } = await supabase
-          .from('rss_feeds')
-          .select('*')
-          .eq('is_active', true)
-          .order('feed_name', { ascending: true });
+        const { data: podcastNames, error: podcastError } = await supabase
+          .from('podcasts')
+          .select('podcast_name')
+          .not('podcast_name', 'is', null)
+          .order('podcast_name', { ascending: true });
         
         if (podcastError) throw podcastError;
         
-        feedSources.podcasts = podcastFeeds.map(feed => {
-          const apiCode = feed.feed_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        // Get unique podcast names
+        const uniquePodcastNames = [...new Set(podcastNames.map(item => item.podcast_name))];
+        
+        feedSources.podcasts = uniquePodcastNames.map((podcastName, index) => {
+          const apiCode = podcastName.toUpperCase().replace(/[^A-Z0-9]/g, '');
           return {
-            id: feed.id.toString(),
-            name: feed.feed_name,
+            id: (index + 1).toString(),
+            name: podcastName,
             url: `https://rss-feed-podcasts.vercel.app/api/podcasts?group_by_show=${apiCode}`,
-            logo: `https://via.placeholder.com/100x100/9C27B0/FFFFFF?text=${encodeURIComponent(feed.feed_name.charAt(0))}`,
+            logo: `https://via.placeholder.com/100x100/9C27B0/FFFFFF?text=${encodeURIComponent(podcastName.charAt(0))}`,
             category: 'Podcasts',
             enabled: false, // Default - user will set this
             type: 'podcasts',

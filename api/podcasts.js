@@ -45,36 +45,37 @@ export default async function handler(req, res) {
           .select('*')
           .order('podcast_date', { ascending: false });
 
-        // Handle show filtering with dynamic database lookup using existing fields
+        // Handle show filtering with actual podcast names from podcasts table
         if (group_by_show && group_by_show !== 'false' && group_by_show !== 'true') {
           try {
-            // Get all active podcast feeds and find match by generated API code
-            const { data: allFeeds, error: feedError } = await supabase
-              .from('rss_feeds')
-              .select('feed_name')
-              .eq('is_active', true);
+            // Get all unique podcast names from podcasts table
+            const { data: podcastNames, error: podcastError } = await supabase
+              .from('podcasts')
+              .select('podcast_name')
+              .not('podcast_name', 'is', null);
             
-            if (feedError) {
-              console.warn(`Error fetching podcast feeds for show: ${group_by_show}`, feedError);
+            if (podcastError) {
+              console.warn(`Error fetching podcast names for show: ${group_by_show}`, podcastError);
               query = query.eq('podcast_name', group_by_show);
             } else {
-              // Find feed where generated API code matches the request
-              const matchingFeed = allFeeds.find(feed => {
-                const apiCode = feed.feed_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+              // Find podcast where generated API code matches the request
+              const uniquePodcastNames = [...new Set(podcastNames.map(item => item.podcast_name))];
+              const matchingPodcast = uniquePodcastNames.find(podcastName => {
+                const apiCode = podcastName.toUpperCase().replace(/[^A-Z0-9]/g, '');
                 return apiCode === group_by_show.toUpperCase();
               });
               
-              if (matchingFeed) {
-                // Use the actual feed name from database
-                query = query.eq('podcast_name', matchingFeed.feed_name);
+              if (matchingPodcast) {
+                // Use the actual podcast name from podcasts table
+                query = query.eq('podcast_name', matchingPodcast);
               } else {
-                console.warn(`Podcast feed not found for api_code: ${group_by_show}`);
+                console.warn(`Podcast not found for api_code: ${group_by_show}`);
                 // Fallback to using the provided show code as-is
                 query = query.eq('podcast_name', group_by_show);
               }
             }
           } catch (error) {
-            console.error('Error looking up podcast feed mapping:', error);
+            console.error('Error looking up podcast mapping:', error);
             // Fallback to using the provided show code as-is
             query = query.eq('podcast_name', group_by_show);
           }

@@ -25,36 +25,37 @@ export default async function handler(req, res) {
         .select('*')
         .order('published_date', { ascending: false });
 
-      // Dynamic source mapping from database using existing fields
+      // Direct company name mapping - use actual company names from articles table
       if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
         try {
-          // Get all active feeds and find match by generated API code
-          const { data: allFeeds, error: feedError } = await supabase
-            .from('motocross_feeds')
-            .select('feed_name')
-            .eq('is_active', true);
+          // Get all unique company names from articles table
+          const { data: companies, error: companyError } = await supabase
+            .from('articles')
+            .select('company')
+            .not('company', 'is', null);
           
-          if (feedError) {
-            console.warn(`Error fetching feeds for source: ${group_by_source}`, feedError);
+          if (companyError) {
+            console.warn(`Error fetching companies for source: ${group_by_source}`, companyError);
             query = query.eq('company', group_by_source);
           } else {
-            // Find feed where generated API code matches the request
-            const matchingFeed = allFeeds.find(feed => {
-              const apiCode = feed.feed_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            // Find company where generated API code matches the request
+            const uniqueCompanies = [...new Set(companies.map(item => item.company))];
+            const matchingCompany = uniqueCompanies.find(company => {
+              const apiCode = company.toUpperCase().replace(/[^A-Z0-9]/g, '');
               return apiCode === group_by_source.toUpperCase();
             });
             
-            if (matchingFeed) {
-              // Use the actual feed name from database
-              query = query.eq('company', matchingFeed.feed_name);
+            if (matchingCompany) {
+              // Use the actual company name from articles table
+              query = query.eq('company', matchingCompany);
             } else {
-              console.warn(`Feed not found for api_code: ${group_by_source}`);
+              console.warn(`Company not found for api_code: ${group_by_source}`);
               // Fallback to using the provided source code as-is
               query = query.eq('company', group_by_source);
             }
           }
         } catch (error) {
-          console.error('Error looking up feed mapping:', error);
+          console.error('Error looking up company mapping:', error);
           // Fallback to using the provided source code as-is
           query = query.eq('company', group_by_source);
         }
