@@ -17,6 +17,9 @@
     },
     "api/historicalSync.js": {
       "maxDuration": 300
+    },
+    "api/add-youtube-channel.js": {
+      "maxDuration": 30
     }
   },
   "crons": [
