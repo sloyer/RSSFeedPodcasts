@@ -59,6 +59,7 @@ export default async function handler(req, res) {
           return {
             id: (index + 1).toString(),
             name: podcastName,
+            apiCode: apiCode,
             url: `https://rss-feed-podcasts.vercel.app/api/podcasts?group_by_show=${apiCode}`,
             logo: `https://via.placeholder.com/100x100/9C27B0/FFFFFF?text=${encodeURIComponent(podcastName.charAt(0))}`,
             category: 'Podcasts',
