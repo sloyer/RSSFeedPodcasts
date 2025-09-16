@@ -52,8 +52,8 @@ export default async function handler(req, res) {
     try {
       console.log('📺 Starting YouTube video fetch...');
       
-      // Get days parameter for YouTube (default to 1 day for regular runs)
-      const youtubeDays = req.query.days ? parseInt(req.query.days) : 1;
+      // Get days parameter for YouTube (default to 2 days for regular runs)
+      const youtubeDays = req.query.days ? parseInt(req.query.days) : 2;
       const youtubeResults = await fetchYouTubeVideos(youtubeDays);
       
       if (youtubeResults.success) {
