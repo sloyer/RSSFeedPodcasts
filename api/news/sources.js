@@ -29,8 +29,7 @@ export default async function handler(req, res) {
         )
       `)
       .eq('is_active', true)
-      .not('company_name', 'is', null)
-      .order('articles.published_date', { ascending: false });
+      .not('company_name', 'is', null);
     
     if (error) throw error;
     

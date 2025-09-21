@@ -29,8 +29,7 @@ export default async function handler(req, res) {
           thumbnail_url
         )
       `)
-      .eq('is_active', true)
-      .order('youtube_videos.published_at', { ascending: false });
+      .eq('is_active', true);
     
     if (error) throw error;
     
