@@ -50,19 +50,43 @@ export default async function handler(req, res) {
       }
     });
     
+    // Helper function to find matching episodes for a feed
+    function findMatchingEpisodes(feedName, displayName) {
+      // Try exact matches first
+      const possibleNames = [
+        feedName,
+        displayName,
+        feedName + ' on RacerX',
+        'The ' + feedName + ' on RacerX'
+      ].filter(Boolean);
+      
+      for (const name of possibleNames) {
+        if (episodeCounts[name]) {
+          return {
+            count: episodeCounts[name],
+            latestDate: latestDates[name],
+            image: showImages[name],
+            episodeName: name
+          };
+        }
+      }
+      
+      return { count: 0, latestDate: null, image: null, episodeName: displayName || feedName };
+    }
+    
     // Build shows array from RSS feeds (include all configured feeds)
     const shows = rssFeeds.map(feed => {
       const showName = feed.display_name || feed.feed_name;
-      const episodeCount = episodeCounts[showName] || 0;
+      const matchResult = findMatchingEpisodes(feed.feed_name, feed.display_name);
       
       return {
         show_name: showName,
-        episode_count: episodeCount,
-        latest_episode_date: latestDates[showName] || null,
-        show_image: showImages[showName] || feed.image_url || null,
-        endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(showName)}`,
+        episode_count: matchResult.count,
+        latest_episode_date: matchResult.latestDate,
+        show_image: matchResult.image || feed.image_url || null,
+        endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(matchResult.episodeName)}`,
         description: feed.description || null,
-        has_episodes: episodeCount > 0
+        has_episodes: matchResult.count > 0
       };
     });
     
