@@ -91,19 +91,28 @@ GET /api/podcasts/shows
       "episode_count": 50,
       "latest_episode_date": "2025-09-21T08:00:00Z",
       "show_image": "https://...",
-      "endpoint_url": "/api/podcasts?podcast_name=Vital%20MX"
+      "endpoint_url": "/api/podcasts?podcast_name=Vital%20MX",
+      "description": "Vital MX Podcast",
+      "has_episodes": true
     },
     {
-      "show_name": "The PulpMX.com Show",
-      "episode_count": 25,
-      "latest_episode_date": "2025-09-20T10:00:00Z", 
-      "show_image": "https://...",
-      "endpoint_url": "/api/podcasts?podcast_name=The%20PulpMX.com%20Show"
+      "show_name": "Title 24",
+      "episode_count": 0,
+      "latest_episode_date": null,
+      "show_image": null,
+      "endpoint_url": "/api/podcasts?podcast_name=Title%2024",
+      "description": "Title 24 - Villopoto & Carmichael", 
+      "has_episodes": false
     }
   ],
-  "total_shows": 6
+  "total_shows": 12
 }
 ```
+
+**Shows all configured feeds:**
+- ✅ **Shows with episodes** (sorted by latest episode date)
+- ✅ **Shows without episodes** (episode_count: 0, has_episodes: false)
+- ✅ **Ready-to-use URLs** for all shows
 
 ---
 
