@@ -1,5 +1,5 @@
 // api/news.js - News Sources Discovery API (similar to podcasts/shows)
-import { supabase } from '../../lib/supabaseClient.js';
+import { supabase } from '../../../lib/supabaseClient.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
