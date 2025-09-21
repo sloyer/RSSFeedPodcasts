@@ -6,6 +6,9 @@
     "api/podcasts.js": {
       "maxDuration": 10
     },
+    "api/podcasts/shows.js": {
+      "maxDuration": 10
+    },
     "api/articles.js": {
       "maxDuration": 10
     },
