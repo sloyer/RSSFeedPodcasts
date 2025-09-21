@@ -15,96 +15,47 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Get all active RSS feeds (configured shows)
-    const { data: rssFeeds, error: feedsError } = await supabase
-      .from('rss_feeds')
-      .select('feed_name, display_name, description, image_url')
-      .eq('is_active', true)
-      .order('feed_name');
-    
-    if (feedsError) throw feedsError;
-    
-    // Get all podcasts for episode counting
-    const { data: podcasts, error: podcastsError } = await supabase
+    // SIMPLE APPROACH: Use podcast_name from podcasts table as source of truth
+    const { data: podcasts, error } = await supabase
       .from('podcasts')
       .select('podcast_name, podcast_date, podcast_image')
       .not('podcast_name', 'is', null)
       .order('podcast_date', { ascending: false });
     
-    if (podcastsError) throw podcastsError;
+    if (error) throw error;
     
-    // Create episode counts map
-    const episodeCounts = {};
-    const latestDates = {};
-    const showImages = {};
+    // Group by podcast_name (the ONLY field that matters)
+    const showsMap = {};
     
     podcasts.forEach(episode => {
-      const showName = episode.podcast_name;
-      episodeCounts[showName] = (episodeCounts[showName] || 0) + 1;
+      const showName = episode.podcast_name; // THIS IS THE STANDARD FIELD
+      
+      if (!showsMap[showName]) {
+        showsMap[showName] = {
+          show_name: showName,
+          episode_count: 0,
+          latest_episode_date: null,
+          show_image: episode.podcast_image,
+          endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(showName)}`,
+          has_episodes: true
+        };
+      }
+      
+      showsMap[showName].episode_count++;
       
       // Update latest episode date
       const episodeDate = new Date(episode.podcast_date);
-      if (!latestDates[showName] || episodeDate > new Date(latestDates[showName])) {
-        latestDates[showName] = episode.podcast_date;
-        showImages[showName] = episode.podcast_image;
+      if (!showsMap[showName].latest_episode_date || 
+          episodeDate > new Date(showsMap[showName].latest_episode_date)) {
+        showsMap[showName].latest_episode_date = episode.podcast_date;
       }
     });
     
-    // Helper function to find matching episodes for a feed
-    function findMatchingEpisodes(feedName, displayName) {
-      // Try exact matches first
-      const possibleNames = [
-        feedName,
-        displayName,
-        feedName + ' on RacerX',
-        'The ' + feedName + ' on RacerX'
-      ].filter(Boolean);
-      
-      for (const name of possibleNames) {
-        if (episodeCounts[name]) {
-          return {
-            count: episodeCounts[name],
-            latestDate: latestDates[name],
-            image: showImages[name],
-            episodeName: name
-          };
-        }
-      }
-      
-      return { count: 0, latestDate: null, image: null, episodeName: displayName || feedName };
-    }
-    
-    // Build shows array from RSS feeds (include all configured feeds)
-    const shows = rssFeeds.map(feed => {
-      const showName = feed.display_name || feed.feed_name;
-      const matchResult = findMatchingEpisodes(feed.feed_name, feed.display_name);
-      
-      return {
-        show_name: showName,
-        episode_count: matchResult.count,
-        latest_episode_date: matchResult.latestDate,
-        show_image: matchResult.image || feed.image_url || null,
-        endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(matchResult.episodeName)}`,
-        description: feed.description || null,
-        has_episodes: matchResult.count > 0
-      };
-    });
-    
-    // Sort by: shows with episodes first (by latest date), then shows without episodes
-    shows.sort((a, b) => {
-      // Shows with episodes come first
-      if (a.has_episodes && !b.has_episodes) return -1;
-      if (!a.has_episodes && b.has_episodes) return 1;
-      
-      // Both have episodes: sort by latest date
-      if (a.has_episodes && b.has_episodes) {
-        if (!a.latest_episode_date) return 1;
-        if (!b.latest_episode_date) return -1;
-        return new Date(b.latest_episode_date) - new Date(a.latest_episode_date);
-      }
-      
-      // Both have no episodes: sort alphabetically
-      return a.show_name.localeCompare(b.show_name);
+    // Convert to array and sort by latest episode date
+    const shows = Object.values(showsMap).sort((a, b) => {
+      if (!a.latest_episode_date) return 1;
+      if (!b.latest_episode_date) return -1;
+      return new Date(b.latest_episode_date) - new Date(a.latest_episode_date);
     });
     
     return res.status(200).json({
