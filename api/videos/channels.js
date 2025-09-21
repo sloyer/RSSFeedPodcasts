@@ -15,53 +15,54 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Get all channels with their video stats in a single optimized query
-    const { data: channelStats, error } = await supabase
+    // Get all active channels first
+    const { data: channels, error: channelsError } = await supabase
       .from('youtube_channels')
-      .select(`
-        channel_id,
-        channel_title,
-        display_name,
-        is_active,
-        youtube_videos!inner (
-          video_id,
-          published_at,
-          thumbnail_url
-        )
-      `)
+      .select('channel_id, channel_title, display_name')
       .eq('is_active', true);
     
-    if (error) throw error;
+    if (channelsError) throw channelsError;
+    
+    // Get all videos with channel info in one query
+    const { data: videos, error: videosError } = await supabase
+      .from('youtube_videos')
+      .select('channel_id, published_at, thumbnail_url')
+      .in('channel_id', channels.map(c => c.channel_id))
+      .order('published_at', { ascending: false });
+    
+    if (videosError) throw videosError;
     
     // Process the data to group by channel and get stats
     const channelMap = new Map();
     
-    channelStats.forEach(row => {
-      const channelName = row.display_name || row.channel_title;
-      const channelId = row.channel_id;
-      
-      if (!channelMap.has(channelId)) {
-        channelMap.set(channelId, {
-          channel_name: channelName,
-          channel_id: channelId,
-          video_count: 0,
-          latest_video_date: null,
-          channel_image: null,
-          endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
-          description: `Videos from ${channelName}`,
-          has_videos: false
-        });
-      }
-      
-      const channel = channelMap.get(channelId);
-      channel.video_count++;
-      channel.has_videos = true;
-      
-      // Update latest video info if this is newer
-      if (!channel.latest_video_date || 
-          new Date(row.youtube_videos.published_at) > new Date(channel.latest_video_date)) {
-        channel.latest_video_date = row.youtube_videos.published_at;
-        channel.channel_image = row.youtube_videos.thumbnail_url;
+    // Initialize all channels
+    channels.forEach(channel => {
+      const channelName = channel.display_name || channel.channel_title;
+      channelMap.set(channel.channel_id, {
+        channel_name: channelName,
+        channel_id: channel.channel_id,
+        video_count: 0,
+        latest_video_date: null,
+        channel_image: null,
+        endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
+        description: `Videos from ${channelName}`,
+        has_videos: false
+      });
+    });
+    
+    // Process videos to add stats
+    videos.forEach(video => {
+      const channel = channelMap.get(video.channel_id);
+      if (channel) {
+        channel.video_count++;
+        channel.has_videos = true;
+        
+        // Update latest video info if this is newer
+        if (!channel.latest_video_date || 
+            new Date(video.published_at) > new Date(channel.latest_video_date)) {
+          channel.latest_video_date = video.published_at;
+          channel.channel_image = video.thumbnail_url;
+        }
       }
     });
     

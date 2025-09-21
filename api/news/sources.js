@@ -15,52 +15,54 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Get all sources with their article stats in a single optimized query
-    const { data: sourceStats, error } = await supabase
+    // Get all active sources first
+    const { data: sources, error: sourcesError } = await supabase
       .from('motocross_feeds')
-      .select(`
-        company_name,
-        feed_name,
-        is_active,
-        articles!inner (
-          id,
-          published_date,
-          image_url
-        )
-      `)
+      .select('company_name, feed_name')
       .eq('is_active', true)
       .not('company_name', 'is', null);
     
-    if (error) throw error;
+    if (sourcesError) throw sourcesError;
+    
+    // Get all articles for these sources in one query
+    const { data: articles, error: articlesError } = await supabase
+      .from('articles')
+      .select('company, published_date, image_url')
+      .in('company', sources.map(s => s.company_name))
+      .order('published_date', { ascending: false });
+    
+    if (articlesError) throw articlesError;
     
     // Process the data to group by source and get stats
     const sourceMap = new Map();
     
-    sourceStats.forEach(row => {
-      const companyName = row.company_name;
-      
-      if (!sourceMap.has(companyName)) {
-        sourceMap.set(companyName, {
-          source_name: companyName,
-          feed_name: row.feed_name,
-          article_count: 0,
-          latest_article_date: null,
-          source_image: null,
-          endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(companyName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
-          description: `Articles from ${companyName}`,
-          has_articles: false
-        });
-      }
-      
-      const source = sourceMap.get(companyName);
-      source.article_count++;
-      source.has_articles = true;
-      
-      // Update latest article info if this is newer
-      if (!source.latest_article_date || 
-          new Date(row.articles.published_date) > new Date(source.latest_article_date)) {
-        source.latest_article_date = row.articles.published_date;
-        source.source_image = row.articles.image_url;
+    // Initialize all sources
+    sources.forEach(source => {
+      sourceMap.set(source.company_name, {
+        source_name: source.company_name,
+        feed_name: source.feed_name,
+        article_count: 0,
+        latest_article_date: null,
+        source_image: null,
+        endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(source.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
+        description: `Articles from ${source.company_name}`,
+        has_articles: false
+      });
+    });
+    
+    // Process articles to add stats
+    articles.forEach(article => {
+      const source = sourceMap.get(article.company);
+      if (source) {
+        source.article_count++;
+        source.has_articles = true;
+        
+        // Update latest article info if this is newer
+        if (!source.latest_article_date || 
+            new Date(article.published_date) > new Date(source.latest_article_date)) {
+          source.latest_article_date = article.published_date;
+          source.source_image = article.image_url;
+        }
       }
     });
     
