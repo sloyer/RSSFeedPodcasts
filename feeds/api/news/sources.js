@@ -15,54 +15,58 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Get all active motocross feeds (news sources)
-    const { data: feeds, error: feedsError } = await supabase
+    // Get all sources with their article stats in a single optimized query
+    const { data: sourceStats, error } = await supabase
       .from('motocross_feeds')
-      .select('*')
+      .select(`
+        company_name,
+        feed_name,
+        is_active,
+        articles!inner (
+          id,
+          published_date,
+          image_url
+        )
+      `)
       .eq('is_active', true)
       .not('company_name', 'is', null)
-      .order('company_name', { ascending: true });
+      .order('articles.published_date', { ascending: false });
     
-    if (feedsError) throw feedsError;
+    if (error) throw error;
     
-    // Get article counts for each source
-    const sourceData = [];
+    // Process the data to group by source and get stats
+    const sourceMap = new Map();
     
-    for (const feed of feeds) {
-      // Get article count and latest article for this source
-      const { data: articles, error: articleError } = await supabase
-        .from('articles')
-        .select('id, published_date, image_url')
-        .eq('company', feed.company_name)
-        .order('published_date', { ascending: false })
-        .limit(1);
+    sourceStats.forEach(row => {
+      const companyName = row.company_name;
       
-      if (articleError) {
-        console.warn(`Error fetching articles for source ${feed.company_name}:`, articleError);
-        continue;
+      if (!sourceMap.has(companyName)) {
+        sourceMap.set(companyName, {
+          source_name: companyName,
+          feed_name: row.feed_name,
+          article_count: 0,
+          latest_article_date: null,
+          source_image: null,
+          endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(companyName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
+          description: `Articles from ${companyName}`,
+          has_articles: false
+        });
       }
       
-      // Get total article count for this source
-      const { count: articleCount, error: countError } = await supabase
-        .from('articles')
-        .select('*', { count: 'exact', head: true })
-        .eq('company', feed.company_name);
+      const source = sourceMap.get(companyName);
+      source.article_count++;
+      source.has_articles = true;
       
-      if (countError) {
-        console.warn(`Error counting articles for source ${feed.company_name}:`, countError);
+      // Update latest article info if this is newer
+      if (!source.latest_article_date || 
+          new Date(row.articles.published_date) > new Date(source.latest_article_date)) {
+        source.latest_article_date = row.articles.published_date;
+        source.source_image = row.articles.image_url;
       }
-      
-      sourceData.push({
-        source_name: feed.company_name,
-        feed_name: feed.feed_name,
-        article_count: articleCount || 0,
-        latest_article_date: articles.length > 0 ? articles[0].published_date : null,
-        source_image: articles.length > 0 ? articles[0].image_url : null,
-        endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
-        description: `Articles from ${feed.company_name}`,
-        has_articles: (articleCount || 0) > 0
-      });
-    }
+    });
+    
+    // Convert to array
+    const sourceData = Array.from(sourceMap.values());
     
     // Sort by latest article date (newest first), then by article count
     sourceData.sort((a, b) => {

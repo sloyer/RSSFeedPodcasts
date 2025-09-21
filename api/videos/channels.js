@@ -15,55 +15,59 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Get all active YouTube channels
-    const { data: channels, error: channelsError } = await supabase
+    // Get all channels with their video stats in a single optimized query
+    const { data: channelStats, error } = await supabase
       .from('youtube_channels')
-      .select('*')
+      .select(`
+        channel_id,
+        channel_title,
+        display_name,
+        is_active,
+        youtube_videos!inner (
+          video_id,
+          published_at,
+          thumbnail_url
+        )
+      `)
       .eq('is_active', true)
-      .order('channel_title', { ascending: true });
+      .order('youtube_videos.published_at', { ascending: false });
     
-    if (channelsError) throw channelsError;
+    if (error) throw error;
     
-    // Get video counts for each channel
-    const channelData = [];
+    // Process the data to group by channel and get stats
+    const channelMap = new Map();
     
-    for (const channel of channels) {
-      // Get video count and latest video for this channel
-      const { data: videos, error: videoError } = await supabase
-        .from('youtube_videos')
-        .select('video_id, published_at, thumbnail_url')
-        .eq('channel_id', channel.channel_id)
-        .order('published_at', { ascending: false })
-        .limit(1);
+    channelStats.forEach(row => {
+      const channelName = row.display_name || row.channel_title;
+      const channelId = row.channel_id;
       
-      if (videoError) {
-        console.warn(`Error fetching videos for channel ${channel.channel_id}:`, videoError);
-        continue;
+      if (!channelMap.has(channelId)) {
+        channelMap.set(channelId, {
+          channel_name: channelName,
+          channel_id: channelId,
+          video_count: 0,
+          latest_video_date: null,
+          channel_image: null,
+          endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
+          description: `Videos from ${channelName}`,
+          has_videos: false
+        });
       }
       
-      // Get total video count for this channel
-      const { count: videoCount, error: countError } = await supabase
-        .from('youtube_videos')
-        .select('*', { count: 'exact', head: true })
-        .eq('channel_id', channel.channel_id);
+      const channel = channelMap.get(channelId);
+      channel.video_count++;
+      channel.has_videos = true;
       
-      if (countError) {
-        console.warn(`Error counting videos for channel ${channel.channel_id}:`, countError);
+      // Update latest video info if this is newer
+      if (!channel.latest_video_date || 
+          new Date(row.youtube_videos.published_at) > new Date(channel.latest_video_date)) {
+        channel.latest_video_date = row.youtube_videos.published_at;
+        channel.channel_image = row.youtube_videos.thumbnail_url;
       }
-      
-      const channelName = channel.display_name || channel.channel_title;
-      
-      channelData.push({
-        channel_name: channelName,
-        channel_id: channel.channel_id,
-        video_count: videoCount || 0,
-        latest_video_date: videos.length > 0 ? videos[0].published_at : null,
-        channel_image: videos.length > 0 ? videos[0].thumbnail_url : null,
-        endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
-        description: `Videos from ${channelName}`,
-        has_videos: (videoCount || 0) > 0
-      });
-    }
+    });
+    
+    // Convert to array
+    const channelData = Array.from(channelMap.values());
     
     // Sort by latest video date (newest first), then by video count
     channelData.sort((a, b) => {
