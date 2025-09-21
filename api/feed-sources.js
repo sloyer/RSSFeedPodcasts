@@ -39,27 +39,24 @@ export default async function handler(req, res) {
         }));
       }
       
-      // Fetch podcast feeds - get actual podcast names from podcasts table
+      // Fetch podcast feeds - get RSS feeds from rss_feeds table
       if (!type || type === 'podcasts') {
-        const { data: podcastNames, error: podcastError } = await supabase
-          .from('podcasts')
-          .select('podcast_name')
-          .not('podcast_name', 'is', null)
-          .order('podcast_name', { ascending: true });
+        const { data: podcastFeeds, error: podcastError } = await supabase
+          .from('rss_feeds')
+          .select('*')
+          .eq('is_active', true)
+          .order('feed_name', { ascending: true });
         
         if (podcastError) throw podcastError;
         
-        // Get unique podcast names
-        const uniquePodcastNames = [...new Set(podcastNames.map(item => item.podcast_name))];
-        
-        feedSources.podcasts = uniquePodcastNames.map((podcastName, index) => {
-          const apiCode = podcastName.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        feedSources.podcasts = podcastFeeds.map(feed => {
+          const apiCode = feed.feed_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
           return {
-            id: (index + 1).toString(),
-            name: podcastName,
+            id: feed.id.toString(),
+            name: feed.feed_name,
             apiCode: apiCode,
             url: `https://rss-feed-podcasts.vercel.app/api/podcasts?group_by_show=${apiCode}`,
-            logo: `https://via.placeholder.com/100x100/9C27B0/FFFFFF?text=${encodeURIComponent(podcastName.charAt(0))}`,
+            logo: `https://via.placeholder.com/100x100/9C27B0/FFFFFF?text=${encodeURIComponent(feed.feed_name.charAt(0))}`,
             category: 'Podcasts',
             enabled: false, // Default - user will set this
             type: 'podcasts',
