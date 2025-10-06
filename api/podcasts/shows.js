@@ -15,6 +15,17 @@ export default async function handler(req, res) {
   }
   
   try {
+    // Get podcast show descriptions from rss_feeds
+    const { data: feedDescriptions } = await supabase
+      .from('rss_feeds')
+      .select('feed_name, description')
+      .eq('is_active', true);
+    
+    const descriptionMap = new Map();
+    feedDescriptions?.forEach(feed => {
+      descriptionMap.set(feed.feed_name, feed.description);
+    });
+    
     // SIMPLE APPROACH: Use podcast_name from podcasts table as source of truth
     const { data: podcasts, error } = await supabase
       .from('podcasts')
@@ -37,6 +48,7 @@ export default async function handler(req, res) {
           latest_episode_date: null,
           show_image: episode.podcast_image,
           endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(showName)}`,
+          description: descriptionMap.get(showName) || null,
           has_episodes: true
         };
       }

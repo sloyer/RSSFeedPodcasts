@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active sources first
     const { data: sources, error: sourcesError } = await supabase
       .from('motocross_feeds')
-      .select('company_name, feed_name')
+      .select('company_name, feed_name, description')
       .eq('is_active', true)
       .not('company_name', 'is', null);
     
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
         latest_article_date: null,
         source_image: null,
         endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(source.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
-        description: `Articles from ${source.company_name}`,
+        description: source.description || `Articles from ${source.company_name}`,
         has_articles: false
       });
     });

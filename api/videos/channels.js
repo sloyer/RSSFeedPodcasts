@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active channels first
     const { data: channels, error: channelsError } = await supabase
       .from('youtube_channels')
-      .select('channel_id, channel_title, display_name')
+      .select('channel_id, channel_title, display_name, description')
       .eq('is_active', true);
     
     if (channelsError) throw channelsError;
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
         latest_video_date: null,
         channel_image: null,
         endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
-        description: `Videos from ${channelName}`,
+        description: channel.description || `Videos from ${channelName}`,
         has_videos: false
       });
     });
