@@ -67,9 +67,9 @@ export default async function handler(req, res) {
         }
       }
 
-      // ENHANCED: Multi-channel filtering using API codes
+      // ENHANCED: Multi-channel filtering using channel names
       if (channels) {
-        const channelList = channels.split(',').map(c => c.trim().toUpperCase());
+        const channelList = channels.split(',').map(c => c.trim());
         
         // Get all active channels
         const { data: allChannels } = await supabase
@@ -77,12 +77,11 @@ export default async function handler(req, res) {
           .select('channel_id, display_name, channel_title')
           .eq('is_active', true);
         
-        // Map API codes to actual channel IDs
+        // Map channel names to channel IDs
         const channelIds = allChannels
           .filter(channel => {
             const channelName = channel.display_name || channel.channel_title;
-            const apiCode = channelName.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            return channelList.includes(apiCode);
+            return channelList.includes(channelName);
           })
           .map(channel => channel.channel_id);
         

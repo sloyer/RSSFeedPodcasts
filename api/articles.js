@@ -28,25 +28,11 @@ export default async function handler(req, res) {
 
       // NEW: Multi-source filtering
       if (sources) {
-        const sourceList = sources.split(',').map(s => s.trim().toUpperCase());
+        const sourceList = sources.split(',').map(s => s.trim());
         
-        // Get all active feeds
-        const { data: feeds } = await supabase
-          .from('motocross_feeds')
-          .select('company_name')
-          .eq('is_active', true);
-        
-        // Map API codes to company names
-        const companyNames = feeds
-          .filter(feed => {
-            const apiCode = feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            return sourceList.includes(apiCode);
-          })
-          .map(feed => feed.company_name);
-        
-        // Filter by multiple companies
-        if (companyNames.length > 0) {
-          query = query.in('company', companyNames);
+        // Filter by multiple companies using exact names
+        if (sourceList.length > 0) {
+          query = query.in('company', sourceList);
         }
       }
       // Company name mapping using motocross_feeds table

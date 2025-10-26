@@ -38,15 +38,13 @@ export default async function handler(req, res) {
     
     // Initialize all sources
     sources.forEach(source => {
-      const apiCode = source.company_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
       sourceMap.set(source.company_name, {
         source_name: source.company_name,
         feed_name: source.feed_name,
-        api_code: apiCode,
         article_count: 0,
         latest_article_date: null,
         source_image: null,
-        endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(apiCode)}`,
+        endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(source.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
         description: source.description || `Articles from ${source.company_name}`,
         has_articles: false
       });

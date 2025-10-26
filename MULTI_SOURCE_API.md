@@ -27,14 +27,13 @@ The API now supports fetching content from **multiple user-selected sources in a
 GET /api/news/sources
 ```
 
-**Response includes `api_code` field:**
+**Response:**
 ```json
 {
   "success": true,
   "data": [
     {
       "source_name": "Vital MX",
-      "api_code": "VITALMX",
       "feed_name": "Vital MX RSS Feed",
       "article_count": 150,
       "description": "Latest motocross news from Vital MX",
@@ -42,7 +41,6 @@ GET /api/news/sources
     },
     {
       "source_name": "Racer X",
-      "api_code": "RACERX",
       "feed_name": "Racer X Online",
       "article_count": 89,
       "description": "Racer X coverage",
@@ -50,7 +48,6 @@ GET /api/news/sources
     },
     {
       "source_name": "MX Vice",
-      "api_code": "MXVICE",
       "article_count": 45,
       "description": "MX Vice news",
       "endpoint_url": "/api/articles?group_by_source=MXVICE"
@@ -62,11 +59,11 @@ GET /api/news/sources
 ### Multi-Source Filtering
 
 ```http
-GET /api/articles?sources=VITALMX,RACERX,MXVICE&limit=20
+GET /api/articles?sources=Vital MX,Racer X,MX Vice&limit=20
 ```
 
 **Parameters:**
-- `sources` - Comma-separated list of API codes
+- `sources` - Comma-separated list of source names (URL encoded)
 - `limit` - Number of articles to return (default: 20)
 - `offset` - Pagination offset (default: 0)
 - `search` - Search keyword (optional)
@@ -118,14 +115,13 @@ GET /api/articles?sources=VITALMX,RACERX,MXVICE&limit=20
 GET /api/podcasts/shows
 ```
 
-**Response includes `api_code` field:**
+**Response:**
 ```json
 {
   "success": true,
   "data": [
     {
       "show_name": "Gypsy Tales",
-      "api_code": "GYPSYTALES",
       "episode_count": 45,
       "description": "Motocross stories and interviews",
       "latest_episode_date": "2025-10-21T10:00:00Z",
@@ -133,7 +129,6 @@ GET /api/podcasts/shows
     },
     {
       "show_name": "The PulpMX.com Show",
-      "api_code": "THEPULPMXCOMSHOW",
       "episode_count": 67,
       "description": "Weekly motocross podcast",
       "latest_episode_date": "2025-10-20T12:00:00Z",
@@ -146,11 +141,11 @@ GET /api/podcasts/shows
 ### Multi-Show Filtering
 
 ```http
-GET /api/podcasts?shows=GYPSYTALES,THEPULPMXCOMSHOW&limit=20
+GET /api/podcasts?shows=Gypsy Tales,The PulpMX.com Show&limit=20
 ```
 
 **Parameters:**
-- `shows` - Comma-separated list of show API codes
+- `shows` - Comma-separated list of show names (URL encoded)
 - `limit` - Number of episodes to return (default: 50)
 - `offset` - Pagination offset (default: 0)
 - `search` - Search keyword (optional)
@@ -197,14 +192,13 @@ GET /api/podcasts?shows=GYPSYTALES,THEPULPMXCOMSHOW&limit=20
 GET /api/videos/channels
 ```
 
-**Response includes `api_code` field:**
+**Response:**
 ```json
 {
   "success": true,
   "data": [
     {
       "channel_name": "Swapmoto Live",
-      "api_code": "SWAPMOTOLIVE",
       "channel_id": "UCxxxxx",
       "video_count": 23,
       "description": "Live motocross coverage and interviews",
@@ -213,7 +207,6 @@ GET /api/videos/channels
     },
     {
       "channel_name": "Vital MX",
-      "api_code": "VITALMX",
       "channel_id": "UCyyyyy",
       "video_count": 34,
       "description": "Vital MX video content",
@@ -227,11 +220,11 @@ GET /api/videos/channels
 ### Multi-Channel Filtering
 
 ```http
-GET /api/youtube?channels=SWAPMOTOLIVE,VITALMX&days=30&limit=20
+GET /api/youtube?channels=Swapmoto Live,Vital MX&days=30&limit=20
 ```
 
 **Parameters:**
-- `channels` - Comma-separated list of channel API codes
+- `channels` - Comma-separated list of channel names (URL encoded)
 - `limit` - Number of videos to return (default: 20)
 - `offset` - Pagination offset (default: 0)
 - `days` - Days back to fetch (default: 7)
@@ -430,23 +423,23 @@ const VideosFeedScreen = () => {
 
 ---
 
-## API Code Generation
+## URL Encoding
 
-All API codes are auto-generated using this formula:
+Since source/show/channel names may contain spaces and special characters, make sure to URL encode them:
 
 ```javascript
-const apiCode = sourceName
-  .toUpperCase()
-  .replace(/[^A-Z0-9]/g, '');
+// JavaScript
+const selectedSources = ["Vital MX", "Racer X", "MX Vice"];
+const url = `/api/articles?sources=${encodeURIComponent(selectedSources.join(','))}`;
+// Result: /api/articles?sources=Vital%20MX%2CRacer%20X%2CMX%20Vice
+
+// Or encode the entire parameter
+const params = new URLSearchParams({
+  sources: selectedSources.join(','),
+  limit: 20
+});
+const url = `/api/articles?${params}`;
 ```
-
-**Examples:**
-- `"Vital MX"` → `"VITALMX"`
-- `"The PulpMX.com Show"` → `"THEPULPMXCOMSHOW"`
-- `"Racer X"` → `"RACERX"`
-- `"Australian Supercross Official"` → `"AUSTRALIANSUPERCROSSOFFICIAL"`
-
-**You don't need to generate these yourself** - the discovery endpoints return the `api_code` field.
 
 ---
 

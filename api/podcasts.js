@@ -48,26 +48,11 @@ export default async function handler(req, res) {
 
         // NEW: Multi-show filtering
         if (shows) {
-          const showList = shows.split(',').map(s => s.trim().toUpperCase());
+          const showList = shows.split(',').map(s => s.trim());
           
-          // Get all podcast names from database
-          const { data: allPodcasts } = await supabase
-            .from('podcasts')
-            .select('podcast_name')
-            .not('podcast_name', 'is', null);
-          
-          // Get unique show names
-          const uniqueShows = [...new Set(allPodcasts.map(p => p.podcast_name))];
-          
-          // Map API codes to actual show names
-          const showNames = uniqueShows.filter(showName => {
-            const apiCode = showName.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            return showList.includes(apiCode);
-          });
-          
-          // Filter by multiple shows
-          if (showNames.length > 0) {
-            query = query.in('podcast_name', showNames);
+          // Filter by multiple shows using exact names
+          if (showList.length > 0) {
+            query = query.in('podcast_name', showList);
           }
         }
         // Handle show filtering with actual podcast names from podcasts table

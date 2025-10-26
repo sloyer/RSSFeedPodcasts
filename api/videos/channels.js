@@ -38,15 +38,13 @@ export default async function handler(req, res) {
     // Initialize all channels
     channels.forEach(channel => {
       const channelName = channel.display_name || channel.channel_title;
-      const apiCode = channelName.toUpperCase().replace(/[^A-Z0-9]/g, '');
       channelMap.set(channel.channel_id, {
         channel_name: channelName,
         channel_id: channel.channel_id,
-        api_code: apiCode,
         video_count: 0,
         latest_video_date: null,
         channel_image: null,
-        endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(apiCode)}`,
+        endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
         description: channel.description || `Videos from ${channelName}`,
         has_videos: false
       });
