@@ -604,9 +604,63 @@ All endpoints return consistent error format:
 
 ---
 
+## 🚀 Multi-Source Filtering ⭐ NEW
+
+The API now supports fetching from **multiple sources in a single call** instead of making separate requests for each source.
+
+### Why Use Multi-Source Filtering?
+
+**Before (Multiple Calls):**
+```javascript
+// 3 separate API calls
+const vital = await fetch('/api/articles?group_by_source=VITALMX&limit=10');
+const racerx = await fetch('/api/articles?group_by_source=RACERX&limit=10');
+const mxvice = await fetch('/api/articles?group_by_source=MXVICE&limit=10');
+
+// Combine and sort client-side
+const all = [...vital.data, ...racerx.data, ...mxvice.data];
+all.sort((a, b) => new Date(b.published_date) - new Date(a.published_date));
+const top20 = all.slice(0, 20);
+```
+
+**After (Single Call):**
+```javascript
+// One API call, server does everything
+const response = await fetch('/api/articles?sources=VITALMX,RACERX,MXVICE&limit=20');
+const articles = response.data; // Done! ✅
+```
+
+### How to Use
+
+Discovery endpoints now include an `api_code` field:
+
+```javascript
+// Get news sources
+const newsResponse = await fetch('/api/news/sources');
+// Response: [{ source_name: "Vital MX", api_code: "VITALMX", ... }]
+
+// User selects sources
+const selectedCodes = ['VITALMX', 'RACERX', 'MXVICE'];
+
+// Single API call
+const articles = await fetch(
+  `/api/articles?sources=${selectedCodes.join(',')}&limit=20`
+);
+```
+
+**Works for all content types:**
+- Articles: `?sources=VITALMX,RACERX,MXVICE`
+- Podcasts: `?shows=GYPSYTALES,PULPMXSHOW`
+- Videos: `?channels=SWAPMOTOLIVE,VITALMX`
+
+See [MULTI_SOURCE_API.md](MULTI_SOURCE_API.md) for complete implementation guide.
+
+---
+
 ## 📞 Support
 
 Questions? Contact the backend team or check:
+- **Multi-Source Guide**: `MULTI_SOURCE_API.md` (NEW!)
 - Full API docs in the repo: `PODCAST_API_DOCS.md`, `NEWS_API_DOCS.md`, `VIDEOS_API_DOCS.md`
 - Base URL: `https://rss-feed-podcasts.vercel.app/api`
 

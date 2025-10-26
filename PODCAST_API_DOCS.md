@@ -204,6 +204,26 @@ GET /api/podcasts?search=keyword
 - Searches in episode titles and descriptions
 - Case insensitive
 
+### **Multi-Show Filter** ⭐ NEW
+```http
+GET /api/podcasts?shows=GYPSYTALES,PULPMXSHOW,VITALMX&limit=20
+```
+- **Single API call** to fetch episodes from multiple shows
+- `shows`: Comma-separated list of show API codes
+- Get API codes from `/api/podcasts/shows` (includes `api_code` field)
+- Server-side filtering, sorting, and combining
+- **Recommended for user-selected shows**
+
+**Example:**
+```javascript
+// Get shows user selected
+const apiCodes = ['GYPSYTALES', 'PULPMXSHOW', 'VITALMX'];
+const url = `/api/podcasts?shows=${apiCodes.join(',')}&limit=20`;
+// Single call returns filtered, sorted episodes from all 3 shows
+```
+
+See [MULTI_SOURCE_API.md](MULTI_SOURCE_API.md) for complete guide.
+
 ### **Combined Parameters**
 ```http
 GET /api/podcasts?group_by_show=GYPSYTALES&limit=10&search=motocross

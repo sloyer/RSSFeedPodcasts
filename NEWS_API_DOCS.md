@@ -184,6 +184,26 @@ GET /api/articles?company=Vital MX
 - Direct company name filter (legacy support)
 - Must match exact company name in database
 
+### **Multi-Source Filter** ⭐ NEW
+```http
+GET /api/articles?sources=VITALMX,RACERX,MXVICE&limit=20
+```
+- **Single API call** to fetch from multiple sources
+- `sources`: Comma-separated list of API codes
+- Get API codes from `/api/news/sources` (includes `api_code` field)
+- Server-side filtering, sorting, and combining
+- **Recommended for user-selected feeds**
+
+**Example:**
+```javascript
+// Get sources user selected
+const apiCodes = ['VITALMX', 'RACERX', 'MXVICE'];
+const url = `/api/articles?sources=${apiCodes.join(',')}&limit=20`;
+// Single call returns filtered, sorted articles from all 3 sources
+```
+
+See [MULTI_SOURCE_API.md](MULTI_SOURCE_API.md) for complete guide.
+
 ### **Combined Parameters**
 ```http
 GET /api/articles?group_by_source=VITALMX&limit=5&search=highlights

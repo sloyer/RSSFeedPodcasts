@@ -19,7 +19,8 @@ export default async function handler(req, res) {
           search, 
           podcast_name,
           group_by_show = 'false',
-          debug_shows = 'false'
+          debug_shows = 'false',
+          shows // NEW: comma-separated show API codes
         } = req.query;
 
         // Debug endpoint to see all actual show names in database
@@ -45,8 +46,32 @@ export default async function handler(req, res) {
           .select('*')
           .order('podcast_date', { ascending: false });
 
+        // NEW: Multi-show filtering
+        if (shows) {
+          const showList = shows.split(',').map(s => s.trim().toUpperCase());
+          
+          // Get all podcast names from database
+          const { data: allPodcasts } = await supabase
+            .from('podcasts')
+            .select('podcast_name')
+            .not('podcast_name', 'is', null);
+          
+          // Get unique show names
+          const uniqueShows = [...new Set(allPodcasts.map(p => p.podcast_name))];
+          
+          // Map API codes to actual show names
+          const showNames = uniqueShows.filter(showName => {
+            const apiCode = showName.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            return showList.includes(apiCode);
+          });
+          
+          // Filter by multiple shows
+          if (showNames.length > 0) {
+            query = query.in('podcast_name', showNames);
+          }
+        }
         // Handle show filtering with actual podcast names from podcasts table
-        if (group_by_show && group_by_show !== 'false' && group_by_show !== 'true') {
+        else if (group_by_show && group_by_show !== 'false' && group_by_show !== 'true') {
           try {
             // Get all unique podcast names from podcasts table
             const { data: podcastNames, error: podcastError } = await supabase

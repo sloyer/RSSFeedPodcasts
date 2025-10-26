@@ -184,11 +184,25 @@ GET /api/youtube?days=30
 ```
 - `days`: Number of days back to fetch videos (default: 7)
 
-### **Multiple Channels**
+### **Multi-Channel Filter** ⭐ ENHANCED
 ```http
-GET /api/youtube?channels=UCxxxxx,UCyyyyy
+GET /api/youtube?channels=SWAPMOTOLIVE,VITALMX,MXVICE&days=30&limit=20
 ```
-- `channels`: Comma-separated channel IDs for user preferences
+- **Single API call** to fetch videos from multiple channels
+- `channels`: Comma-separated list of channel API codes
+- Get API codes from `/api/videos/channels` (includes `api_code` field)
+- Server-side filtering, sorting, and combining
+- **Recommended for user-selected channels**
+
+**Example:**
+```javascript
+// Get channels user selected
+const apiCodes = ['SWAPMOTOLIVE', 'VITALMX', 'MXVICE'];
+const url = `/api/youtube?channels=${apiCodes.join(',')}&days=30&limit=20`;
+// Single call returns filtered, sorted videos from all 3 channels
+```
+
+See [MULTI_SOURCE_API.md](MULTI_SOURCE_API.md) for complete guide.
 
 ### **Combined Parameters**
 ```http

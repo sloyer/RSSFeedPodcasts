@@ -67,10 +67,29 @@ export default async function handler(req, res) {
         }
       }
 
-      // Filter by multiple channels (for user preferences)
+      // ENHANCED: Multi-channel filtering using API codes
       if (channels) {
-        const channelList = channels.split(',');
-        query = query.in('channel_id', channelList);
+        const channelList = channels.split(',').map(c => c.trim().toUpperCase());
+        
+        // Get all active channels
+        const { data: allChannels } = await supabase
+          .from('youtube_channels')
+          .select('channel_id, display_name, channel_title')
+          .eq('is_active', true);
+        
+        // Map API codes to actual channel IDs
+        const channelIds = allChannels
+          .filter(channel => {
+            const channelName = channel.display_name || channel.channel_title;
+            const apiCode = channelName.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            return channelList.includes(apiCode);
+          })
+          .map(channel => channel.channel_id);
+        
+        // Filter by multiple channels
+        if (channelIds.length > 0) {
+          query = query.in('channel_id', channelIds);
+        }
       }
 
       // Search in title and description

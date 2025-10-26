@@ -17,7 +17,8 @@ export default async function handler(req, res) {
         offset = 0, 
         search, 
         company,
-        group_by_source = 'false'
+        group_by_source = 'false',
+        sources // NEW: comma-separated API codes
       } = req.query;
 
       let query = supabase
@@ -25,8 +26,31 @@ export default async function handler(req, res) {
         .select('*')
         .order('published_date', { ascending: false });
 
+      // NEW: Multi-source filtering
+      if (sources) {
+        const sourceList = sources.split(',').map(s => s.trim().toUpperCase());
+        
+        // Get all active feeds
+        const { data: feeds } = await supabase
+          .from('motocross_feeds')
+          .select('company_name')
+          .eq('is_active', true);
+        
+        // Map API codes to company names
+        const companyNames = feeds
+          .filter(feed => {
+            const apiCode = feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            return sourceList.includes(apiCode);
+          })
+          .map(feed => feed.company_name);
+        
+        // Filter by multiple companies
+        if (companyNames.length > 0) {
+          query = query.in('company', companyNames);
+        }
+      }
       // Company name mapping using motocross_feeds table
-      if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
+      else if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
         try {
           // Get company names from motocross_feeds table
           const { data: feeds, error: feedError } = await supabase

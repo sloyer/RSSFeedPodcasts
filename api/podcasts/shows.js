@@ -42,8 +42,10 @@ export default async function handler(req, res) {
       const showName = episode.podcast_name; // THIS IS THE STANDARD FIELD
       
       if (!showsMap[showName]) {
+        const apiCode = showName.toUpperCase().replace(/[^A-Z0-9]/g, '');
         showsMap[showName] = {
           show_name: showName,
+          api_code: apiCode,
           episode_count: 0,
           latest_episode_date: null,
           show_image: episode.podcast_image,
