@@ -1,4 +1,4 @@
-// api/cron.js - Enhanced with Push Notifications
+// api/cron.js - Enhanced with Push Notifications via RevenueCat
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
 import { fetchYouTubeVideos } from '../lib/fetchYouTubeVideos.js';
@@ -27,13 +27,39 @@ function isRecent(dateString) {
   return contentDate > thirtyMinutesAgo;
 }
 
-async function sendPushNotifications(newContent) {
+async function sendPushNotificationsViaRevenueCat(newContent) {
   if (!newContent || newContent.length === 0) return;
   
-  console.log(`[PUSH] Processing ${newContent.length} items`);
+  console.log(`[PUSH] Processing ${newContent.length} items via RevenueCat`);
 
+  // Get all subscribers from RevenueCat
+  let allSubscribers = [];
+  try {
+    console.log('[PUSH] Fetching subscribers from RevenueCat...');
+    const response = await fetch('https://api.revenuecat.com/v1/subscribers', {
+      headers: {
+        'Authorization': `Bearer ${process.env.REVENUECAT_SECRET_KEY}`,
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      console.error('[PUSH] RevenueCat API error:', response.status, response.statusText);
+      return;
+    }
+
+    const data = await response.json();
+    allSubscribers = data.subscribers || [];
+    console.log(`[PUSH] Found ${allSubscribers.length} total subscribers in RevenueCat`);
+  } catch (error) {
+    console.error('[PUSH] Error fetching subscribers from RevenueCat:', error);
+    return;
+  }
+
+  // Process each new content item
   for (const item of newContent) {
     try {
+      // Check if already sent (keep dedup in Supabase)
       const { data: alreadySent } = await supabase
         .from('sent_notifications')
         .select('id')
@@ -41,33 +67,50 @@ async function sendPushNotifications(newContent) {
         .eq('feed_name', item.feedName)
         .single();
 
-      if (alreadySent) continue;
+      if (alreadySent) {
+        console.log(`[PUSH] Already sent for ${item.feedName}: ${item.title.substring(0, 50)}...`);
+        continue;
+      }
+
+      console.log(`[PUSH] Finding subscribers for ${item.feedName}...`);
 
       const feedType = item.type === 'article' ? 'news' : 
                        item.type === 'video' ? 'youtube' : 'podcasts';
+      
+      const tokensToNotify = [];
+      
+      // Filter subscribers who want this specific feed
+      for (const subscriber of allSubscribers) {
+        try {
+          const prefsAttr = subscriber.subscriber_attributes?.user_preferences;
+          if (!prefsAttr || !prefsAttr.value) continue;
+          
+          const prefs = JSON.parse(prefsAttr.value);
+          
+          // Check if this user wants notifications for this feed
+          const notifications = prefs.notifications?.[feedType] || [];
+          const pushToken = prefs.pushToken;
+          
+          // Match by feed ID (notifications array contains feed IDs)
+          if (notifications.includes(item.feedId) && pushToken) {
+            tokensToNotify.push(pushToken);
+          }
+        } catch (parseError) {
+          // Skip users with invalid preference data
+          console.error('[PUSH] Error parsing subscriber preferences:', parseError);
+        }
+      }
 
-      const { data: preferences } = await supabase
-        .from('notification_preferences')
-        .select('user_id')
-        .eq('feed_name', item.feedName)
-        .eq('feed_type', feedType)
-        .eq('notifications_enabled', true);
+      if (tokensToNotify.length === 0) {
+        console.log(`[PUSH] No subscribers for ${item.feedName}`);
+        continue;
+      }
 
-      if (!preferences || preferences.length === 0) continue;
+      console.log(`[PUSH] Sending to ${tokensToNotify.length} devices for ${item.feedName}`);
 
-      const userIds = preferences.map(p => p.user_id);
-      const { data: tokens } = await supabase
-        .from('push_tokens')
-        .select('expo_push_token')
-        .in('user_id', userIds)
-        .eq('is_active', true);
-
-      if (!tokens || tokens.length === 0) continue;
-
-      console.log(`[PUSH] Sending to ${tokens.length} devices for ${item.feedName}`);
-
-      const messages = tokens.map(t => ({
-        to: t.expo_push_token,
+      // Build notification messages
+      const messages = tokensToNotify.map(token => ({
+        to: token,
         title: `New from ${item.feedName}`,
         body: item.title.substring(0, 150),
         data: {
@@ -81,6 +124,7 @@ async function sendPushNotifications(newContent) {
         priority: 'high'
       }));
 
+      // Send to Expo (batch up to 100 at a time)
       const chunks = chunkArray(messages, 100);
       
       for (const chunk of chunks) {
@@ -100,6 +144,7 @@ async function sendPushNotifications(newContent) {
         }
       }
 
+      // Log that we sent this (keep dedup in Supabase)
       await supabase
         .from('sent_notifications')
         .insert({
@@ -107,9 +152,11 @@ async function sendPushNotifications(newContent) {
           content_type: item.type,
           feed_name: item.feedName,
           title: item.title,
-          recipient_count: tokens.length,
+          recipient_count: tokensToNotify.length,
           sent_at: new Date().toISOString()
         });
+
+      console.log(`[PUSH] ✅ Logged notification for ${item.feedName}`);
 
     } catch (error) {
       console.error(`[PUSH] Error for ${item.feedName}:`, error);
@@ -134,7 +181,7 @@ export default async function handler(req, res) {
     console.log('🔄 Cron job started');
     
     const results = {};
-    const recentContent = []; // NEW: Collect content for notifications
+    const recentContent = []; // Collect content for notifications
     
     // STEP 1: Fetch podcasts
     try {
@@ -142,14 +189,14 @@ export default async function handler(req, res) {
       results.podcasts = 'success';
       console.log('✅ Podcasts completed');
       
-      // NEW: If your function returns new episodes, collect them
-      // Adjust based on what fetchAndStoreFeeds() actually returns
+      // Collect new episodes (adjust based on what fetchAndStoreFeeds() actually returns)
       if (podcastResults && podcastResults.newEpisodes) {
         podcastResults.newEpisodes
           .filter(e => isRecent(e.podcast_date || e.published_date))
           .forEach(e => {
             recentContent.push({
               id: String(e.id || e.guid),
+              feedId: String(e.podcast_id || e.show_id || e.id), // Feed ID for matching
               title: e.podcast_title || e.title,
               feedName: e.show_name || e.podcast_name,
               type: 'podcast',
@@ -179,13 +226,14 @@ export default async function handler(req, res) {
       results.articles = `success: ${articleResults.articlesProcessed} articles, ${articleResults.feedsSkipped} feeds skipped`;
       console.log('✅ Articles completed');
       
-      // NEW: If your function returns new articles, collect them
+      // Collect new articles
       if (articleResults && articleResults.newArticles) {
         articleResults.newArticles
           .filter(a => isRecent(a.published_date))
           .forEach(a => {
             recentContent.push({
               id: String(a.id),
+              feedId: String(a.source_id || a.company_id || a.id), // Feed ID for matching
               title: a.title,
               feedName: a.company || a.source_name,
               type: 'article',
@@ -209,13 +257,14 @@ export default async function handler(req, res) {
         results.youtube = `success: ${youtubeResults.videosAdded} videos from ${youtubeResults.channelsProcessed} channels`;
         console.log('✅ YouTube completed');
         
-        // NEW: If your function returns new videos, collect them
+        // Collect new videos
         if (youtubeResults.newVideos) {
           youtubeResults.newVideos
             .filter(v => isRecent(v.publishedAt))
             .forEach(v => {
               recentContent.push({
                 id: String(v.id),
+                feedId: String(v.channelId || v.id), // Channel ID for matching
                 title: v.title,
                 feedName: v.channelName,
                 type: 'video',
@@ -232,12 +281,12 @@ export default async function handler(req, res) {
       console.log('❌ YouTube failed:', error.message);
     }
     
-    // NEW: STEP 4: Send push notifications
+    // STEP 4: Send push notifications via RevenueCat
     if (recentContent.length > 0) {
       console.log(`[PUSH] Found ${recentContent.length} recent items, sending notifications...`);
       try {
-        await sendPushNotifications(recentContent);
-        results.notifications = `sent for ${recentContent.length} items`;
+        await sendPushNotificationsViaRevenueCat(recentContent);
+        results.notifications = `processed ${recentContent.length} items`;
       } catch (error) {
         results.notifications = `error: ${error.message}`;
         console.log('❌ Notifications failed:', error.message);
