@@ -1,4 +1,4 @@
-// api/cron.js - Enhanced with Push Notifications via RevenueCat
+// api/cron.js - Complete with Push Notifications
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
 import { fetchYouTubeVideos } from '../lib/fetchYouTubeVideos.js';
@@ -27,39 +27,14 @@ function isRecent(dateString) {
   return contentDate > thirtyMinutesAgo;
 }
 
-async function sendPushNotificationsViaRevenueCat(newContent) {
+async function sendPushNotifications(newContent) {
   if (!newContent || newContent.length === 0) return;
   
-  console.log(`[PUSH] Processing ${newContent.length} items via RevenueCat`);
+  console.log(`[PUSH] Processing ${newContent.length} items`);
 
-  // Get all subscribers from RevenueCat
-  let allSubscribers = [];
-  try {
-    console.log('[PUSH] Fetching subscribers from RevenueCat...');
-    const response = await fetch('https://api.revenuecat.com/v1/subscribers', {
-      headers: {
-        'Authorization': `Bearer ${process.env.REVENUECAT_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!response.ok) {
-      console.error('[PUSH] RevenueCat API error:', response.status, response.statusText);
-      return;
-    }
-
-    const data = await response.json();
-    allSubscribers = data.subscribers || [];
-    console.log(`[PUSH] Found ${allSubscribers.length} total subscribers in RevenueCat`);
-  } catch (error) {
-    console.error('[PUSH] Error fetching subscribers from RevenueCat:', error);
-    return;
-  }
-
-  // Process each new content item
   for (const item of newContent) {
     try {
-      // Check if already sent (keep dedup in Supabase)
+      // Check if already sent
       const { data: alreadySent } = await supabase
         .from('sent_notifications')
         .select('id')
@@ -68,49 +43,46 @@ async function sendPushNotificationsViaRevenueCat(newContent) {
         .single();
 
       if (alreadySent) {
-        console.log(`[PUSH] Already sent for ${item.feedName}: ${item.title.substring(0, 50)}...`);
+        console.log(`[PUSH] Already sent for ${item.id}`);
         continue;
       }
 
-      console.log(`[PUSH] Finding subscribers for ${item.feedName}...`);
-
+      // Find subscribers to this feed
       const feedType = item.type === 'article' ? 'news' : 
                        item.type === 'video' ? 'youtube' : 'podcasts';
-      
-      const tokensToNotify = [];
-      
-      // Filter subscribers who want this specific feed
-      for (const subscriber of allSubscribers) {
-        try {
-          const prefsAttr = subscriber.subscriber_attributes?.user_preferences;
-          if (!prefsAttr || !prefsAttr.value) continue;
-          
-          const prefs = JSON.parse(prefsAttr.value);
-          
-          // Check if this user wants notifications for this feed
-          const notifications = prefs.notifications?.[feedType] || [];
-          const pushToken = prefs.pushToken;
-          
-          // Match by feed ID (notifications array contains feed IDs)
-          if (notifications.includes(item.feedId) && pushToken) {
-            tokensToNotify.push(pushToken);
-          }
-        } catch (parseError) {
-          // Skip users with invalid preference data
-          console.error('[PUSH] Error parsing subscriber preferences:', parseError);
-        }
-      }
 
-      if (tokensToNotify.length === 0) {
+      const { data: preferences } = await supabase
+        .from('notification_preferences')
+        .select('user_id')
+        .eq('feed_name', item.feedName)
+        .eq('feed_type', feedType)
+        .eq('notifications_enabled', true);
+
+      if (!preferences || preferences.length === 0) {
         console.log(`[PUSH] No subscribers for ${item.feedName}`);
         continue;
       }
 
-      console.log(`[PUSH] Sending to ${tokensToNotify.length} devices for ${item.feedName}`);
+      console.log(`[PUSH] Found ${preferences.length} subscribers for ${item.feedName}`);
 
-      // Build notification messages
-      const messages = tokensToNotify.map(token => ({
-        to: token,
+      // Get push tokens
+      const userIds = preferences.map(p => p.user_id);
+      const { data: tokens } = await supabase
+        .from('push_tokens')
+        .select('expo_push_token')
+        .in('user_id', userIds)
+        .eq('is_active', true);
+
+      if (!tokens || tokens.length === 0) {
+        console.log(`[PUSH] No active tokens`);
+        continue;
+      }
+
+      console.log(`[PUSH] Sending to ${tokens.length} devices`);
+
+      // Build messages
+      const messages = tokens.map(t => ({
+        to: t.expo_push_token,
         title: `New from ${item.feedName}`,
         body: item.title.substring(0, 150),
         data: {
@@ -124,7 +96,7 @@ async function sendPushNotificationsViaRevenueCat(newContent) {
         priority: 'high'
       }));
 
-      // Send to Expo (batch up to 100 at a time)
+      // Send to Expo (batch up to 100)
       const chunks = chunkArray(messages, 100);
       
       for (const chunk of chunks) {
@@ -144,7 +116,7 @@ async function sendPushNotificationsViaRevenueCat(newContent) {
         }
       }
 
-      // Log that we sent this (keep dedup in Supabase)
+      // Log as sent
       await supabase
         .from('sent_notifications')
         .insert({
@@ -152,11 +124,9 @@ async function sendPushNotificationsViaRevenueCat(newContent) {
           content_type: item.type,
           feed_name: item.feedName,
           title: item.title,
-          recipient_count: tokensToNotify.length,
+          recipient_count: tokens.length,
           sent_at: new Date().toISOString()
         });
-
-      console.log(`[PUSH] ✅ Logged notification for ${item.feedName}`);
 
     } catch (error) {
       console.error(`[PUSH] Error for ${item.feedName}:`, error);
@@ -181,29 +151,12 @@ export default async function handler(req, res) {
     console.log('🔄 Cron job started');
     
     const results = {};
-    const recentContent = []; // Collect content for notifications
     
     // STEP 1: Fetch podcasts
     try {
-      const podcastResults = await fetchAndStoreFeeds();
+      await fetchAndStoreFeeds();
       results.podcasts = 'success';
       console.log('✅ Podcasts completed');
-      
-      // Collect new episodes (adjust based on what fetchAndStoreFeeds() actually returns)
-      if (podcastResults && podcastResults.newEpisodes) {
-        podcastResults.newEpisodes
-          .filter(e => isRecent(e.podcast_date || e.published_date))
-          .forEach(e => {
-            recentContent.push({
-              id: String(e.id || e.guid),
-              feedId: String(e.podcast_id || e.show_id || e.id), // Feed ID for matching
-              title: e.podcast_title || e.title,
-              feedName: e.show_name || e.podcast_name,
-              type: 'podcast',
-              url: e.feed_url || e.link
-            });
-          });
-      }
     } catch (error) {
       results.podcasts = `error: ${error.message}`;
       console.log('❌ Podcasts failed:', error.message);
@@ -225,22 +178,6 @@ export default async function handler(req, res) {
       const articleResults = await fetchMotocrossFeeds(dateParam);
       results.articles = `success: ${articleResults.articlesProcessed} articles, ${articleResults.feedsSkipped} feeds skipped`;
       console.log('✅ Articles completed');
-      
-      // Collect new articles
-      if (articleResults && articleResults.newArticles) {
-        articleResults.newArticles
-          .filter(a => isRecent(a.published_date))
-          .forEach(a => {
-            recentContent.push({
-              id: String(a.id),
-              feedId: String(a.source_id || a.company_id || a.id), // Feed ID for matching
-              title: a.title,
-              feedName: a.company || a.source_name,
-              type: 'article',
-              url: a.article_url
-            });
-          });
-      }
     } catch (error) {
       results.articles = `error: ${error.message}`;
       console.log('❌ Articles failed:', error.message);
@@ -256,22 +193,6 @@ export default async function handler(req, res) {
       if (youtubeResults.success) {
         results.youtube = `success: ${youtubeResults.videosAdded} videos from ${youtubeResults.channelsProcessed} channels`;
         console.log('✅ YouTube completed');
-        
-        // Collect new videos
-        if (youtubeResults.newVideos) {
-          youtubeResults.newVideos
-            .filter(v => isRecent(v.publishedAt))
-            .forEach(v => {
-              recentContent.push({
-                id: String(v.id),
-                feedId: String(v.channelId || v.id), // Channel ID for matching
-                title: v.title,
-                feedName: v.channelName,
-                type: 'video',
-                url: v.watchUrl
-              });
-            });
-        }
       } else {
         results.youtube = `error: ${youtubeResults.error}`;
         console.log('❌ YouTube failed:', youtubeResults.error);
@@ -281,19 +202,101 @@ export default async function handler(req, res) {
       console.log('❌ YouTube failed:', error.message);
     }
     
-    // STEP 4: Send push notifications via RevenueCat
-    if (recentContent.length > 0) {
-      console.log(`[PUSH] Found ${recentContent.length} recent items, sending notifications...`);
+    // STEP 4: Check for recent content and send push notifications
+    try {
+      console.log('[PUSH] Checking for recent content to notify about...');
+      
+      const recentContent = [];
+      const API_BASE_URL = 'https://rss-feed-podcasts.vercel.app';
+      
+      // Query recent podcasts
       try {
-        await sendPushNotificationsViaRevenueCat(recentContent);
-        results.notifications = `processed ${recentContent.length} items`;
+        const response = await fetch(`${API_BASE_URL}/api/podcasts?limit=50`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          const recentEpisodes = data.data.filter(item => isRecent(item.podcast_date));
+          
+          console.log(`[PUSH] Found ${recentEpisodes.length} recent podcast episodes`);
+          
+          recentEpisodes.forEach(e => {
+            recentContent.push({
+              id: String(e.id || e.guid),
+              feedId: String(e.id),
+              title: e.podcast_title || e.title,
+              feedName: e.show_name || e.podcast_name,
+              type: 'podcast',
+              url: e.feed_url || e.link
+            });
+          });
+        }
       } catch (error) {
-        results.notifications = `error: ${error.message}`;
-        console.log('❌ Notifications failed:', error.message);
+        console.error('[PUSH] Error fetching recent podcasts:', error);
       }
-    } else {
-      console.log('[PUSH] No recent content to notify about');
-      results.notifications = 'no new content';
+      
+      // Query recent articles
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/articles?limit=50`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          const recentArticles = data.data.filter(item => isRecent(item.published_date));
+          
+          console.log(`[PUSH] Found ${recentArticles.length} recent articles`);
+          
+          recentArticles.forEach(a => {
+            recentContent.push({
+              id: String(a.id),
+              feedId: String(a.id),
+              title: a.title,
+              feedName: a.company,
+              type: 'article',
+              url: a.article_url
+            });
+          });
+        }
+      } catch (error) {
+        console.error('[PUSH] Error fetching recent articles:', error);
+      }
+      
+      // Query recent videos
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/youtube?limit=50&days=1`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          const recentVideos = data.data.filter(item => isRecent(item.publishedAt));
+          
+          console.log(`[PUSH] Found ${recentVideos.length} recent videos`);
+          
+          recentVideos.forEach(v => {
+            recentContent.push({
+              id: String(v.id),
+              feedId: String(v.id),
+              title: v.title,
+              feedName: v.channelName,
+              type: 'video',
+              url: v.watchUrl
+            });
+          });
+        }
+      } catch (error) {
+        console.error('[PUSH] Error fetching recent videos:', error);
+      }
+      
+      // Send notifications
+      if (recentContent.length > 0) {
+        console.log(`[PUSH] Sending notifications for ${recentContent.length} items...`);
+        await sendPushNotifications(recentContent);
+        results.notifications = `sent for ${recentContent.length} items`;
+      } else {
+        console.log('[PUSH] No recent content found');
+        results.notifications = 'no new content';
+      }
+      
+    } catch (error) {
+      results.notifications = `error: ${error.message}`;
+      console.log('❌ Notifications step failed:', error.message);
     }
     
     const duration = (Date.now() - startTime) / 1000;
@@ -313,4 +316,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
