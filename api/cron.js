@@ -80,11 +80,15 @@ async function sendPushNotifications(newContent) {
 
       console.log(`[PUSH] Sending to ${tokens.length} devices`);
 
-      // Build messages
+    // Build messages with content type prefix
+      const contentTypeLabel = item.type === 'article' ? 'Article' :
+                               item.type === 'video' ? 'Video' :
+                               'Podcast';
+      
       const messages = tokens.map(t => ({
         to: t.expo_push_token,
         title: `New from ${item.feedName}`,
-        body: item.title.substring(0, 150),
+        body: `${contentTypeLabel}: ${item.title.substring(0, 140)}`,
         data: {
           type: item.type,
           id: item.id,
