@@ -1,4 +1,5 @@
 // api/cron.js - Complete with Push Notifications
+
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
 import { fetchYouTubeVideos } from '../lib/fetchYouTubeVideos.js';
@@ -80,25 +81,37 @@ async function sendPushNotifications(newContent) {
 
       console.log(`[PUSH] Sending to ${tokens.length} devices`);
 
-    // Build messages with content type prefix
-      const contentTypeLabel = item.type === 'article' ? 'Article' :
-                               item.type === 'video' ? 'Video' :
-                               'Podcast';
-      
-      const messages = tokens.map(t => ({
-        to: t.expo_push_token,
-        title: `New from ${item.feedName}`,
-        body: `${contentTypeLabel}: ${item.title.substring(0, 140)}`,
-        data: {
-          type: item.type,
-          id: item.id,
-          feedName: item.feedName,
-          url: item.url || ''
-        },
-        sound: 'default',
-        badge: 1,
-        priority: 'high'
-      }));
+      // Build messages with new format
+      const messages = tokens.map(t => {
+        // Format content type for display
+        const contentType = item.type === 'article' ? 'Article' :
+                            item.type === 'video' ? 'Video' :
+                            item.type === 'podcast' ? 'Podcast' : 'Content';
+        
+        // Create notification title with format: "Company - Type: Title"
+        const notificationTitle = `${item.feedName} - ${contentType}: ${item.title}`;
+        
+        // Limit title to 65 characters to ensure it displays properly
+        const truncatedTitle = notificationTitle.length > 65 
+          ? notificationTitle.substring(0, 62) + '...' 
+          : notificationTitle;
+        
+        return {
+          to: t.expo_push_token,
+          title: truncatedTitle,
+          body: '', // Leave body empty since title contains everything
+          data: {
+            type: item.type,
+            id: item.id,
+            feedName: item.feedName,
+            url: item.url,
+            title: item.title // Include full title in data for app to use
+          },
+          sound: 'default',
+          badge: 1,
+          priority: 'high'
+        };
+      });
 
       // Send to Expo (batch up to 100)
       const chunks = chunkArray(messages, 100);
@@ -320,3 +333,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
