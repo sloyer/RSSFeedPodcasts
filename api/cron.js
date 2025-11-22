@@ -86,9 +86,9 @@ async function sendPushNotifications(newContent) {
         // Remove "The " from company name
         let cleanCompany = item.feedName.replace(/^The\s+/i, '');
         
-        // Shorten company to 12 chars
-        const shortCompany = cleanCompany.length > 12 
-          ? cleanCompany.substring(0, 12)
+        // Shorten company to 15 chars (more room now)
+        const shortCompany = cleanCompany.length > 15 
+          ? cleanCompany.substring(0, 15)
           : cleanCompany;
         
         // Content type (short label)
@@ -96,23 +96,21 @@ async function sendPushNotifications(newContent) {
                             item.type === 'video' ? 'Video' :
                             'Podcast';
         
-        // TITLE: Company and type (line 1 - always visible)
-        const title = `${shortCompany} ${contentType}`;
+        // TITLE: Type first, then source (line 1 - always visible)
+        // Format: "Article: Racer X" or "Video: MXGP" or "Podcast: PulpMX Show"
+        const title = `${contentType}: ${shortCompany}`;
         
         // SUBTITLE: The actual content title (line 2 - visible in collapsed view!)
-        // iOS shows ~60 chars in subtitle on notification center
-        const subtitle = item.title.length > 60
-          ? item.title.substring(0, 57) + '...'
+        // iOS shows ~70 chars in subtitle on notification center
+        const subtitle = item.title.length > 70
+          ? item.title.substring(0, 67) + '...'
           : item.title;
-        
-        // BODY: Full title for when they expand (line 3+ - shows when tapped)
-        const body = item.title;
         
         return {
           to: t.expo_push_token,
           title: title,           // Line 1: "Racer X Article"
           subtitle: subtitle,     // Line 2: "Jett Lawrence Dominates 2025 Supercross..." (iOS only)
-          body: body,            // Expanded view: Full title
+          body: '',              // Empty - who cares about expanded view
           data: {
             type: item.type,
             id: item.id,
