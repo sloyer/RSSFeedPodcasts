@@ -1,4 +1,4 @@
-// api/cron.js - Complete with Push Notifications (Compact Format)
+// api/cron.js - Complete with Push Notifications (Better Format - Title + Body)
 
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
@@ -81,39 +81,40 @@ async function sendPushNotifications(newContent) {
 
       console.log(`[PUSH] Sending to ${tokens.length} devices`);
 
-      // Build messages with compact format (no spaces)
+      // Build messages with PROPER title + body format
       const messages = tokens.map(t => {
-        // Remove "The " from beginning of company name (case insensitive)
+        // Remove "The " from beginning of company name
         let cleanCompany = item.feedName.replace(/^The\s+/i, '');
         
-        // Truncate company name to 8 characters
-        const shortCompany = cleanCompany.length > 8 
-          ? cleanCompany.substring(0, 8)
+        // Truncate company name to 10 characters for title
+        const shortCompany = cleanCompany.length > 10 
+          ? cleanCompany.substring(0, 10)
           : cleanCompany;
         
-        // Format content type (short)
+        // Format content type
         const contentType = item.type === 'article' ? 'Article' :
                             item.type === 'video' ? 'Video' :
                             item.type === 'podcast' ? 'Podcast' : 'Content';
         
-        // Create notification title: "Company-Type-Title" (no spaces)
-        const notificationTitle = `${shortCompany}-${contentType}-${item.title}`;
+        // TITLE: Just company and type (short and scannable)
+        const notificationTitle = `${shortCompany}-${contentType}`;
         
-        // Limit total to 110 characters (extra space from removing spaces)
-        const truncatedTitle = notificationTitle.length > 110 
-          ? notificationTitle.substring(0, 107) + '...' 
-          : notificationTitle;
+        // BODY: The actual content title (can be much longer!)
+        // iOS shows ~175 chars in collapsed view, ~300+ when expanded
+        const notificationBody = item.title.length > 175
+          ? item.title.substring(0, 172) + '...'
+          : item.title;
         
         return {
           to: t.expo_push_token,
-          title: truncatedTitle,
-          body: '', // Leave body empty since title contains everything
+          title: notificationTitle,
+          body: notificationBody, // PUT THE CONTENT HERE!
           data: {
             type: item.type,
             id: item.id,
-            feedName: item.feedName, // Store full name in data
+            feedName: item.feedName,
             url: item.url,
-            title: item.title // Include full title in data for app to use
+            title: item.title
           },
           sound: 'default',
           badge: 1,
