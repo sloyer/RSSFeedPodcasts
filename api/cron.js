@@ -1,4 +1,4 @@
-// api/cron.js - Complete with Push Notifications (Better Format - Title + Body)
+// api/cron.js - Complete with Push Notifications (FIXED - Using Subtitle!)
 
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
@@ -81,34 +81,38 @@ async function sendPushNotifications(newContent) {
 
       console.log(`[PUSH] Sending to ${tokens.length} devices`);
 
-      // Build messages with PROPER title + body format
+      // Build messages with SUBTITLE for better visibility
       const messages = tokens.map(t => {
-        // Remove "The " from beginning of company name
+        // Remove "The " from company name
         let cleanCompany = item.feedName.replace(/^The\s+/i, '');
         
-        // Truncate company name to 10 characters for title
-        const shortCompany = cleanCompany.length > 10 
-          ? cleanCompany.substring(0, 10)
+        // Shorten company to 12 chars
+        const shortCompany = cleanCompany.length > 12 
+          ? cleanCompany.substring(0, 12)
           : cleanCompany;
         
-        // Format content type
+        // Content type (short label)
         const contentType = item.type === 'article' ? 'Article' :
                             item.type === 'video' ? 'Video' :
-                            item.type === 'podcast' ? 'Podcast' : 'Content';
+                            'Podcast';
         
-        // TITLE: Just company and type (short and scannable)
-        const notificationTitle = `${shortCompany}-${contentType}`;
+        // TITLE: Company and type (line 1 - always visible)
+        const title = `${shortCompany} ${contentType}`;
         
-        // BODY: The actual content title (can be much longer!)
-        // iOS shows ~175 chars in collapsed view, ~300+ when expanded
-        const notificationBody = item.title.length > 175
-          ? item.title.substring(0, 172) + '...'
+        // SUBTITLE: The actual content title (line 2 - visible in collapsed view!)
+        // iOS shows ~60 chars in subtitle on notification center
+        const subtitle = item.title.length > 60
+          ? item.title.substring(0, 57) + '...'
           : item.title;
+        
+        // BODY: Full title for when they expand (line 3+ - shows when tapped)
+        const body = item.title;
         
         return {
           to: t.expo_push_token,
-          title: notificationTitle,
-          body: notificationBody, // PUT THE CONTENT HERE!
+          title: title,           // Line 1: "Racer X Article"
+          subtitle: subtitle,     // Line 2: "Jett Lawrence Dominates 2025 Supercross..." (iOS only)
+          body: body,            // Expanded view: Full title
           data: {
             type: item.type,
             id: item.id,
@@ -118,7 +122,8 @@ async function sendPushNotifications(newContent) {
           },
           sound: 'default',
           badge: 1,
-          priority: 'high'
+          priority: 'high',
+          channelId: 'default'  // Android notification channel
         };
       });
 
@@ -342,3 +347,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
