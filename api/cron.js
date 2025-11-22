@@ -1,4 +1,4 @@
-// api/cron.js - Complete with Push Notifications
+// api/cron.js - Complete with Push Notifications (Compact Format)
 
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
@@ -81,19 +81,27 @@ async function sendPushNotifications(newContent) {
 
       console.log(`[PUSH] Sending to ${tokens.length} devices`);
 
-      // Build messages with new format
+      // Build messages with compact format (no spaces)
       const messages = tokens.map(t => {
-        // Format content type for display
+        // Remove "The " from beginning of company name (case insensitive)
+        let cleanCompany = item.feedName.replace(/^The\s+/i, '');
+        
+        // Truncate company name to 8 characters
+        const shortCompany = cleanCompany.length > 8 
+          ? cleanCompany.substring(0, 8)
+          : cleanCompany;
+        
+        // Format content type (short)
         const contentType = item.type === 'article' ? 'Article' :
                             item.type === 'video' ? 'Video' :
                             item.type === 'podcast' ? 'Podcast' : 'Content';
         
-        // Create notification title with format: "Company - Type: Title"
-        const notificationTitle = `${item.feedName} - ${contentType}: ${item.title}`;
+        // Create notification title: "Company-Type-Title" (no spaces)
+        const notificationTitle = `${shortCompany}-${contentType}-${item.title}`;
         
-        // Limit title to 65 characters to ensure it displays properly
-        const truncatedTitle = notificationTitle.length > 65 
-          ? notificationTitle.substring(0, 62) + '...' 
+        // Limit total to 110 characters (extra space from removing spaces)
+        const truncatedTitle = notificationTitle.length > 110 
+          ? notificationTitle.substring(0, 107) + '...' 
           : notificationTitle;
         
         return {
@@ -103,7 +111,7 @@ async function sendPushNotifications(newContent) {
           data: {
             type: item.type,
             id: item.id,
-            feedName: item.feedName,
+            feedName: item.feedName, // Store full name in data
             url: item.url,
             title: item.title // Include full title in data for app to use
           },
@@ -333,4 +341,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
