@@ -28,10 +28,110 @@ function isRecent(dateString) {
   return contentDate > thirtyMinutesAgo;
 }
 
+async function postToTwitter(item) {
+  try {
+    // Skip if no Twitter credentials configured
+    if (!process.env.TWITTER_API_KEY || !process.env.TWITTER_API_SECRET || 
+        !process.env.TWITTER_ACCESS_TOKEN || !process.env.TWITTER_ACCESS_SECRET) {
+      console.log('[TWITTER] Skipping - credentials not configured');
+      return;
+    }
+
+    // Build deep link (same as push notifications)
+    const deepLink = `mxa://${item.type}/${item.id}`;
+    
+    // Emoji for content type
+    const emoji = item.type === 'article' ? '📰' :
+                  item.type === 'video' ? '🎥' : '🎙️';
+    
+    // Build tweet (280 char limit)
+    const tweetText = `${emoji} ${item.feedName}: ${item.title}
+
+${deepLink}
+
+#Motocross #Supercross #MX`;
+
+    // Truncate if too long
+    const finalTweet = tweetText.length > 280 
+      ? tweetText.substring(0, 277) + '...' 
+      : tweetText;
+
+    console.log(`[TWITTER] Posting tweet for: ${item.title.substring(0, 40)}...`);
+
+    // Generate OAuth 1.0a signature
+    const crypto = await import('crypto');
+    const oauth = {
+      consumer_key: process.env.TWITTER_API_KEY,
+      consumer_secret: process.env.TWITTER_API_SECRET,
+      token: process.env.TWITTER_ACCESS_TOKEN,
+      token_secret: process.env.TWITTER_ACCESS_SECRET,
+      signature_method: 'HMAC-SHA1',
+      timestamp: Math.floor(Date.now() / 1000).toString(),
+      nonce: crypto.randomBytes(32).toString('base64'),
+      version: '1.0'
+    };
+
+    // Build OAuth signature
+    const method = 'POST';
+    const url = 'https://api.twitter.com/2/tweets';
+    const params = {
+      oauth_consumer_key: oauth.consumer_key,
+      oauth_token: oauth.token,
+      oauth_signature_method: oauth.signature_method,
+      oauth_timestamp: oauth.timestamp,
+      oauth_nonce: oauth.nonce,
+      oauth_version: oauth.version
+    };
+
+    const paramString = Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .join('&');
+
+    const signatureBase = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
+    const signingKey = `${encodeURIComponent(oauth.consumer_secret)}&${encodeURIComponent(oauth.token_secret)}`;
+    const signature = crypto.createHmac('sha1', signingKey).update(signatureBase).digest('base64');
+
+    params.oauth_signature = signature;
+
+    const authHeader = 'OAuth ' + Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(params[key])}"`)
+      .join(', ');
+
+    // Post to Twitter API v2
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: finalTweet
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${data.data.id}`);
+    } else {
+      const error = await response.text();
+      console.error('[TWITTER] Failed to post:', error);
+    }
+
+  } catch (error) {
+    console.error('[TWITTER] Error:', error);
+    // Don't throw - continue even if Twitter fails
+  }
+}
+
 async function sendPushNotifications(newContent) {
   if (!newContent || newContent.length === 0) return;
   
   console.log(`[PUSH] Processing ${newContent.length} items`);
+
+  // Track if we've tweeted in this run (only tweet once per cron run = ~every 15 min)
+  let hasPostedToTwitter = false;
 
   for (const item of newContent) {
     try {
@@ -156,6 +256,15 @@ async function sendPushNotifications(newContent) {
           recipient_count: tokens.length,
           sent_at: new Date().toISOString()
         });
+
+      // NEW: Tweet ONLY THE FIRST (newest) item per cron run
+      if (!hasPostedToTwitter) {
+        await postToTwitter(item);
+        hasPostedToTwitter = true;
+        console.log('[TWITTER] Posted newest item, skipping rest to avoid spam');
+      } else {
+        console.log(`[TWITTER] Skipping "${item.title.substring(0, 40)}..." (rate limited)`);
+      }
 
     } catch (error) {
       console.error(`[PUSH] Error for ${item.feedName}:`, error);
@@ -316,7 +425,22 @@ export default async function handler(req, res) {
       // Send notifications
       if (recentContent.length > 0) {
         console.log(`[PUSH] Sending notifications for ${recentContent.length} items...`);
-        await sendPushNotifications(recentContent);
+        
+        // Sort by priority for Twitter: Podcasts > Videos > Articles
+        const sortedContent = [...recentContent].sort((a, b) => {
+          const priority = { podcast: 1, video: 2, article: 3 };
+          const aPriority = priority[a.type] || 999;
+          const bPriority = priority[b.type] || 999;
+          
+          // If same type, sort by newest
+          if (aPriority === bPriority) {
+            return String(b.id).localeCompare(String(a.id));
+          }
+          
+          return aPriority - bPriority; // Lower number = higher priority
+        });
+        
+        await sendPushNotifications(sortedContent);
         results.notifications = `sent for ${recentContent.length} items`;
       } else {
         console.log('[PUSH] No recent content found');
