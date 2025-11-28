@@ -37,6 +37,19 @@ async function postToTwitter(item) {
       return;
     }
 
+    // Check if we already tweeted this (independent of push notifications)
+    const { data: alreadyTweeted } = await supabase
+      .from('sent_tweets')
+      .select('id')
+      .eq('content_id', item.id)
+      .eq('feed_name', item.feedName)
+      .single();
+
+    if (alreadyTweeted) {
+      console.log(`[TWITTER] Already tweeted: ${item.title.substring(0, 40)}...`);
+      return;
+    }
+
     // Build deep link (same as push notifications)
     const deepLink = `mxa://${item.type}/${item.id}`;
     
@@ -45,11 +58,12 @@ async function postToTwitter(item) {
                   item.type === 'video' ? '🎥' : '🎙️';
     
     // Build tweet (280 char limit)
+    // Hashtags still work but are less important - keep them minimal
     const tweetText = `${emoji} ${item.feedName}: ${item.title}
 
 ${deepLink}
 
-#Motocross #Supercross #MX`;
+#Motocross`;
 
     // Truncate if too long
     const finalTweet = tweetText.length > 280 
@@ -114,6 +128,18 @@ ${deepLink}
     if (response.ok) {
       const data = await response.json();
       console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${data.data.id}`);
+      
+      // Track that we tweeted this (independent of push notifications)
+      await supabase
+        .from('sent_tweets')
+        .insert({
+          content_id: item.id,
+          content_type: item.type,
+          feed_name: item.feedName,
+          title: item.title,
+          tweet_id: data.data.id,
+          tweeted_at: new Date().toISOString()
+        });
     } else {
       const error = await response.text();
       console.error('[TWITTER] Failed to post:', error);
