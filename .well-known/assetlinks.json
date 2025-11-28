@@ -1,0 +1,11 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.snkindustries.motonewsaggregator",
+    "sha256_cert_fingerprints": [
+      "GET_THIS_FROM_GOOGLE_PLAY_CONSOLE_AFTER_FIRST_ANDROID_BUILD"
+    ]
+  }
+}]
+

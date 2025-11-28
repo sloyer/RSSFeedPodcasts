@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.snkindustries.motonewsaggregator",
+        "paths": [
+          "/a/*",
+          "/article/*",
+          "/video/*",
+          "/podcast/*"
+        ]
+      }
+    ]
+  }
+}
+
