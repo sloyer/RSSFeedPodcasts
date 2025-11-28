@@ -59,8 +59,9 @@ async function postToTwitter(item) {
       accessSecret: process.env.TWITTER_ACCESS_SECRET,
     });
 
-    // Build deep link (same as push notifications)
-    const deepLink = `mxa://${item.type}/${item.id}`;
+    // Build HTTPS deep link (Universal Links)
+    // Format: https://motoaggregate.app/a/{type}-{id}
+    const deepLink = `https://motoaggregate.app/a/${item.type}-${item.id}`;
     
     // Emoji for content type
     const emoji = item.type === 'article' ? '📰' :
