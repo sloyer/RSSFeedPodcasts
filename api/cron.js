@@ -1,10 +1,9 @@
-// api/cron.js - Complete with Push Notifications + Twitter (Using twitter-api-v2 library)
+// api/cron.js - Complete with Push Notifications (FIXED - Using Subtitle!)
 
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
 import { fetchYouTubeVideos } from '../lib/fetchYouTubeVideos.js';
 import { createClient } from '@supabase/supabase-js';
-import { TwitterApi } from 'twitter-api-v2';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -29,6 +28,78 @@ function isRecent(dateString) {
   return contentDate > thirtyMinutesAgo;
 }
 
+async function uploadImageToTwitter(imageUrl, oauth) {
+  try {
+    // Fetch the image
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      console.log('[TWITTER] Failed to fetch image:', imageUrl);
+      return null;
+    }
+
+    const imageBuffer = await imageResponse.arrayBuffer();
+    const base64Image = Buffer.from(imageBuffer).toString('base64');
+
+    // Upload to Twitter media endpoint (v1.1)
+    const crypto = await import('crypto');
+    const uploadOauth = {
+      ...oauth,
+      timestamp: Math.floor(Date.now() / 1000).toString(),
+      nonce: crypto.randomBytes(32).toString('base64')
+    };
+
+    const method = 'POST';
+    const url = 'https://upload.twitter.com/1.1/media/upload.json';
+    const params = {
+      oauth_consumer_key: uploadOauth.consumer_key,
+      oauth_token: uploadOauth.token,
+      oauth_signature_method: uploadOauth.signature_method,
+      oauth_timestamp: uploadOauth.timestamp,
+      oauth_nonce: uploadOauth.nonce,
+      oauth_version: uploadOauth.version
+    };
+
+    const paramString = Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .join('&');
+
+    const signatureBase = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
+    const signingKey = `${encodeURIComponent(uploadOauth.consumer_secret)}&${encodeURIComponent(uploadOauth.token_secret)}`;
+    const signature = crypto.createHmac('sha1', signingKey).update(signatureBase).digest('base64');
+
+    params.oauth_signature = signature;
+
+    const authHeader = 'OAuth ' + Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(params[key])}"`)
+      .join(', ');
+
+    // Upload image
+    const uploadResponse = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `media_data=${encodeURIComponent(base64Image)}`
+    });
+
+    if (uploadResponse.ok) {
+      const data = await uploadResponse.json();
+      console.log('[TWITTER] Image uploaded successfully, media_id:', data.media_id_string);
+      return data.media_id_string;
+    } else {
+      const error = await uploadResponse.text();
+      console.error('[TWITTER] Image upload failed:', error);
+      return null;
+    }
+  } catch (error) {
+    console.error('[TWITTER] Error uploading image:', error);
+    return null;
+  }
+}
+
 async function postToTwitter(item) {
   try {
     // Skip if no Twitter credentials configured
@@ -51,29 +122,19 @@ async function postToTwitter(item) {
       return;
     }
 
-    // Initialize Twitter client with OAuth 1.0a
-    const twitterClient = new TwitterApi({
-      appKey: process.env.TWITTER_API_KEY,
-      appSecret: process.env.TWITTER_API_SECRET,
-      accessToken: process.env.TWITTER_ACCESS_TOKEN,
-      accessSecret: process.env.TWITTER_ACCESS_SECRET,
-    });
-
-    // Build HTTPS deep link (Universal Links)
-    // Format: https://motoaggregate.app/a/{type}-{id}
-    const deepLink = `https://motoaggregate.app/a/${item.type}-${item.id}`;
+    // Build deep link using Universal Links (works on all platforms)
+    const deepLink = `https://www.motoaggregate.app/a/${item.id}`;
     
     // Emoji for content type
     const emoji = item.type === 'article' ? '📰' :
                   item.type === 'video' ? '🎥' : '🎙️';
     
     // Build tweet (280 char limit)
-    // Simple format - hashtags still work but keep it minimal
     const tweetText = `${emoji} ${item.feedName}: ${item.title}
 
 ${deepLink}
 
-#Motocross`;
+#Motocross #Supercross`;
 
     // Truncate if too long
     const finalTweet = tweetText.length > 280 
@@ -82,22 +143,96 @@ ${deepLink}
 
     console.log(`[TWITTER] Posting tweet for: ${item.title.substring(0, 40)}...`);
 
-    // Post tweet using the library
-    const tweet = await twitterClient.v2.tweet(finalTweet);
+    // Generate OAuth 1.0a signature
+    const crypto = await import('crypto');
+    const oauth = {
+      consumer_key: process.env.TWITTER_API_KEY,
+      consumer_secret: process.env.TWITTER_API_SECRET,
+      token: process.env.TWITTER_ACCESS_TOKEN,
+      token_secret: process.env.TWITTER_ACCESS_SECRET,
+      signature_method: 'HMAC-SHA1',
+      timestamp: Math.floor(Date.now() / 1000).toString(),
+      nonce: crypto.randomBytes(32).toString('base64'),
+      version: '1.0'
+    };
 
-    console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${tweet.data.id}`);
-    
-    // Track that we tweeted this (independent of push notifications)
-    await supabase
-      .from('sent_tweets')
-      .insert({
-        content_id: item.id,
-        content_type: item.type,
-        feed_name: item.feedName,
-        title: item.title,
-        tweet_id: tweet.data.id,
-        tweeted_at: new Date().toISOString()
-      });
+    // Upload image if available
+    let mediaId = null;
+    if (item.image) {
+      console.log('[TWITTER] Uploading image:', item.image);
+      mediaId = await uploadImageToTwitter(item.image, oauth);
+    } else {
+      console.log('[TWITTER] No image available for this item');
+    }
+
+    // Build OAuth signature
+    const method = 'POST';
+    const url = 'https://api.twitter.com/2/tweets';
+    const params = {
+      oauth_consumer_key: oauth.consumer_key,
+      oauth_token: oauth.token,
+      oauth_signature_method: oauth.signature_method,
+      oauth_timestamp: oauth.timestamp,
+      oauth_nonce: oauth.nonce,
+      oauth_version: oauth.version
+    };
+
+    const paramString = Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .join('&');
+
+    const signatureBase = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
+    const signingKey = `${encodeURIComponent(oauth.consumer_secret)}&${encodeURIComponent(oauth.token_secret)}`;
+    const signature = crypto.createHmac('sha1', signingKey).update(signatureBase).digest('base64');
+
+    params.oauth_signature = signature;
+
+    const authHeader = 'OAuth ' + Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(params[key])}"`)
+      .join(', ');
+
+    // Build tweet body with optional media
+    const tweetBody = {
+      text: finalTweet
+    };
+
+    if (mediaId) {
+      tweetBody.media = {
+        media_ids: [mediaId]
+      };
+    }
+
+    // Post to Twitter API v2
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(tweetBody)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${data.data.id}`);
+      
+      // Track that we tweeted this (independent of push notifications)
+      await supabase
+        .from('sent_tweets')
+        .insert({
+          content_id: item.id,
+          content_type: item.type,
+          feed_name: item.feedName,
+          title: item.title,
+          tweet_id: data.data.id,
+          tweeted_at: new Date().toISOString()
+        });
+    } else {
+      const error = await response.text();
+      console.error('[TWITTER] Failed to post:', error);
+    }
 
   } catch (error) {
     console.error('[TWITTER] Error:', error);
@@ -166,7 +301,7 @@ async function sendPushNotifications(newContent) {
         // Remove "The " from company name
         let cleanCompany = item.feedName.replace(/^The\s+/i, '');
         
-        // Shorten company to 15 chars
+        // Shorten company to 15 chars (more room now)
         const shortCompany = cleanCompany.length > 15 
           ? cleanCompany.substring(0, 15)
           : cleanCompany;
@@ -188,7 +323,7 @@ async function sendPushNotifications(newContent) {
         
         return {
           to: t.expo_push_token,
-          title: title,           // Line 1: "Article: Racer X"
+          title: title,           // Line 1: "Racer X Article"
           subtitle: subtitle,     // Line 2: "Jett Lawrence Dominates 2025 Supercross..." (iOS only)
           body: '',              // Empty - who cares about expanded view
           data: {
@@ -201,7 +336,7 @@ async function sendPushNotifications(newContent) {
           sound: 'default',
           badge: 1,
           priority: 'high',
-          channelId: 'default'
+          channelId: 'default'  // Android notification channel
         };
       });
 
@@ -344,7 +479,8 @@ export default async function handler(req, res) {
               title: e.podcast_title || e.title,
               feedName: e.show_name || e.podcast_name,
               type: 'podcast',
-              url: e.feed_url || e.link
+              url: e.feed_url || e.link,
+              image: e.podcast_image || e.image_url
             });
           });
         }
@@ -369,7 +505,8 @@ export default async function handler(req, res) {
               title: a.title,
               feedName: a.company,
               type: 'article',
-              url: a.article_url
+              url: a.article_url,
+              image: a.image_url
             });
           });
         }
@@ -394,7 +531,8 @@ export default async function handler(req, res) {
               title: v.title,
               feedName: v.channelName,
               type: 'video',
-              url: v.watchUrl
+              url: v.watchUrl,
+              image: v.thumbnailUrl
             });
           });
         }
