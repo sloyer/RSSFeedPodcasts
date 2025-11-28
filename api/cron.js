@@ -1,9 +1,10 @@
-// api/cron.js - Complete with Push Notifications (FIXED - Using Subtitle!)
+// api/cron.js - Complete with Push Notifications + Twitter (Using twitter-api-v2 library)
 
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
 import { fetchYouTubeVideos } from '../lib/fetchYouTubeVideos.js';
 import { createClient } from '@supabase/supabase-js';
+import { TwitterApi } from 'twitter-api-v2';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -50,6 +51,14 @@ async function postToTwitter(item) {
       return;
     }
 
+    // Initialize Twitter client with OAuth 1.0a
+    const twitterClient = new TwitterApi({
+      appKey: process.env.TWITTER_API_KEY,
+      appSecret: process.env.TWITTER_API_SECRET,
+      accessToken: process.env.TWITTER_ACCESS_TOKEN,
+      accessSecret: process.env.TWITTER_ACCESS_SECRET,
+    });
+
     // Build deep link (same as push notifications)
     const deepLink = `mxa://${item.type}/${item.id}`;
     
@@ -58,7 +67,7 @@ async function postToTwitter(item) {
                   item.type === 'video' ? '🎥' : '🎙️';
     
     // Build tweet (280 char limit)
-    // Hashtags still work but are less important - keep them minimal
+    // Simple format - hashtags still work but keep it minimal
     const tweetText = `${emoji} ${item.feedName}: ${item.title}
 
 ${deepLink}
@@ -72,78 +81,22 @@ ${deepLink}
 
     console.log(`[TWITTER] Posting tweet for: ${item.title.substring(0, 40)}...`);
 
-    // Generate OAuth 1.0a signature
-    const crypto = await import('crypto');
-    const oauth = {
-      consumer_key: process.env.TWITTER_API_KEY,
-      consumer_secret: process.env.TWITTER_API_SECRET,
-      token: process.env.TWITTER_ACCESS_TOKEN,
-      token_secret: process.env.TWITTER_ACCESS_SECRET,
-      signature_method: 'HMAC-SHA1',
-      timestamp: Math.floor(Date.now() / 1000).toString(),
-      nonce: crypto.randomBytes(32).toString('base64'),
-      version: '1.0'
-    };
+    // Post tweet using the library
+    const tweet = await twitterClient.v2.tweet(finalTweet);
 
-    // Build OAuth signature
-    const method = 'POST';
-    const url = 'https://api.twitter.com/2/tweets';
-    const params = {
-      oauth_consumer_key: oauth.consumer_key,
-      oauth_token: oauth.token,
-      oauth_signature_method: oauth.signature_method,
-      oauth_timestamp: oauth.timestamp,
-      oauth_nonce: oauth.nonce,
-      oauth_version: oauth.version
-    };
-
-    const paramString = Object.keys(params)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-      .join('&');
-
-    const signatureBase = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
-    const signingKey = `${encodeURIComponent(oauth.consumer_secret)}&${encodeURIComponent(oauth.token_secret)}`;
-    const signature = crypto.createHmac('sha1', signingKey).update(signatureBase).digest('base64');
-
-    params.oauth_signature = signature;
-
-    const authHeader = 'OAuth ' + Object.keys(params)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(params[key])}"`)
-      .join(', ');
-
-    // Post to Twitter API v2
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        text: finalTweet
-      })
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${data.data.id}`);
-      
-      // Track that we tweeted this (independent of push notifications)
-      await supabase
-        .from('sent_tweets')
-        .insert({
-          content_id: item.id,
-          content_type: item.type,
-          feed_name: item.feedName,
-          title: item.title,
-          tweet_id: data.data.id,
-          tweeted_at: new Date().toISOString()
-        });
-    } else {
-      const error = await response.text();
-      console.error('[TWITTER] Failed to post:', error);
-    }
+    console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${tweet.data.id}`);
+    
+    // Track that we tweeted this (independent of push notifications)
+    await supabase
+      .from('sent_tweets')
+      .insert({
+        content_id: item.id,
+        content_type: item.type,
+        feed_name: item.feedName,
+        title: item.title,
+        tweet_id: tweet.data.id,
+        tweeted_at: new Date().toISOString()
+      });
 
   } catch (error) {
     console.error('[TWITTER] Error:', error);
@@ -212,7 +165,7 @@ async function sendPushNotifications(newContent) {
         // Remove "The " from company name
         let cleanCompany = item.feedName.replace(/^The\s+/i, '');
         
-        // Shorten company to 15 chars (more room now)
+        // Shorten company to 15 chars
         const shortCompany = cleanCompany.length > 15 
           ? cleanCompany.substring(0, 15)
           : cleanCompany;
@@ -234,7 +187,7 @@ async function sendPushNotifications(newContent) {
         
         return {
           to: t.expo_push_token,
-          title: title,           // Line 1: "Racer X Article"
+          title: title,           // Line 1: "Article: Racer X"
           subtitle: subtitle,     // Line 2: "Jett Lawrence Dominates 2025 Supercross..." (iOS only)
           body: '',              // Empty - who cares about expanded view
           data: {
@@ -247,7 +200,7 @@ async function sendPushNotifications(newContent) {
           sound: 'default',
           badge: 1,
           priority: 'high',
-          channelId: 'default'  // Android notification channel
+          channelId: 'default'
         };
       });
 
