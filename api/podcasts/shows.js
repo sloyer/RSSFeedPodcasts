@@ -15,21 +15,28 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Get podcast show descriptions from rss_feeds
+    // Get podcast show descriptions from rss_feeds using feed_url as the join key
     const { data: feedDescriptions } = await supabase
       .from('rss_feeds')
-      .select('feed_name, description')
+      .select('feed_url, feed_name, display_name, description')
       .eq('is_active', true);
     
-    const descriptionMap = new Map();
+    // Create map by feed_url (the reliable join key)
+    const descriptionByUrl = new Map();
+    const descriptionByName = new Map();
     feedDescriptions?.forEach(feed => {
-      descriptionMap.set(feed.feed_name, feed.description);
+      descriptionByUrl.set(feed.feed_url, feed.description);
+      // Also map by feed_name and display_name for fallback matching
+      descriptionByName.set(feed.feed_name, feed.description);
+      if (feed.display_name) {
+        descriptionByName.set(feed.display_name, feed.description);
+      }
     });
     
     // SIMPLE APPROACH: Use podcast_name from podcasts table as source of truth
     const { data: podcasts, error } = await supabase
       .from('podcasts')
-      .select('podcast_name, podcast_date, podcast_image')
+      .select('podcast_name, podcast_date, podcast_image, feed_url')
       .not('podcast_name', 'is', null)
       .order('podcast_date', { ascending: false });
     
@@ -42,13 +49,19 @@ export default async function handler(req, res) {
       const showName = episode.podcast_name; // THIS IS THE STANDARD FIELD
       
       if (!showsMap[showName]) {
+        // Try to find description by feed_url first (most reliable), then by name matching
+        let description = descriptionByUrl.get(episode.feed_url);
+        if (!description) {
+          description = descriptionByName.get(showName);
+        }
+        
         showsMap[showName] = {
           show_name: showName,
           episode_count: 0,
           latest_episode_date: null,
           show_image: episode.podcast_image,
           endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(showName)}`,
-          description: descriptionMap.get(showName) || null,
+          description: description || null,
           has_episodes: true
         };
       }
