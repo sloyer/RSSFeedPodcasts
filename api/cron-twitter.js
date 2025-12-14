@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   
   try {
     const startTime = Date.now();
-    console.log('🐦 Twitter cron started (10-minute interval)');
+    console.log('🐦 Twitter cron started (5-minute interval)');
     
     const twitterResults = await fetchTwitterFeeds(2); // Last 48 hours
     
