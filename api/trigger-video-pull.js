@@ -134,10 +134,10 @@ export default async function handler(req, res) {
     
     // Validate days parameter
     const daysInt = parseInt(days);
-    if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+    if (isNaN(daysInt) || daysInt < 1 || daysInt > 3650) {
       return res.status(400).json({ 
         success: false, 
-        error: 'days must be a number between 1 and 365' 
+        error: 'days must be a number between 1 and 3650 (10 years)' 
       });
     }
     
