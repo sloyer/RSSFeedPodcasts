@@ -10,12 +10,14 @@
     "historical-sync-force": "node scripts/runHistoricalSync.js --force"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^143.0.0",
     "@supabase/supabase-js": "^2.57.4",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "playwright-chromium": "^1.57.0",
+    "playwright-core": "^1.57.0",
     "rss-parser": "^3.13.0",
     "twitter-api-v2": "^1.28.0"
   }
