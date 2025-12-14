@@ -978,10 +978,55 @@ try {
 
 ---
 
+## Twitter Feed Integration 🐦 NEW
+
+Your backend now includes Twitter feeds from 13 motocross accounts!
+
+### Discovery Endpoint
+```
+GET /api/twitter/accounts
+```
+
+**Returns:** List of Twitter accounts with tweet counts and avatars
+
+### Get Tweets
+```
+GET /api/tweets?accounts=pulpmx,racerxonline&limit=20
+```
+
+**Multi-account filtering** - same pattern as news/podcasts/videos!
+
+### Mobile App Usage
+
+```javascript
+// Settings: Get available Twitter accounts
+const twitterAccounts = await fetch('/api/twitter/accounts');
+
+// Feed: Get tweets from selected accounts
+const selectedAccounts = ['pulpmx', 'racerxonline', 'LewisPhillips71'];
+const tweets = await fetch(
+  `/api/tweets?accounts=${selectedAccounts.join(',')}&limit=20`
+);
+
+// Pull-to-refresh
+await fetch('/api/trigger-twitter-pull', { method: 'POST' });
+```
+
+**Features:**
+- ✅ Auto-updates every 15 minutes
+- ✅ Stores last 48 hours of tweets
+- ✅ Chronological order (newest first)
+- ✅ Includes avatars, usernames, tweet text, timestamps
+- ✅ Pull-to-refresh support
+
+See `TWITTER_API_GUIDE.md` for complete integration guide.
+
+---
+
 ## Summary
 
 ### For Settings Screen:
-1. Call discovery endpoints: `/api/news/sources`, `/api/podcasts/shows`, `/api/videos/channels`
+1. Call discovery endpoints: `/api/news/sources`, `/api/podcasts/shows`, `/api/videos/channels`, `/api/twitter/accounts`
 2. Display sources with descriptions and counts
 3. Save user selections locally
 
@@ -991,6 +1036,7 @@ try {
    - `?sources=Source1,Source2,Source3`
    - `?shows=Show1,Show2`
    - `?channels=Channel1,Channel2`
+   - `?accounts=account1,account2` (Twitter)
 3. Display results (already filtered, sorted, and combined)
 
 ### Key URLs:
@@ -999,17 +1045,20 @@ Discovery:
 - GET /api/news/sources
 - GET /api/podcasts/shows
 - GET /api/videos/channels
+- GET /api/twitter/accounts (NEW!)
 
 Content (Multi-Source):
 - GET /api/articles?sources=Vital MX,Racer X&limit=20
 - GET /api/podcasts?shows=Gypsy Tales,PulpMX Show&limit=20
 - GET /api/youtube?channels=Swapmoto Live,Vital MX&limit=20
+- GET /api/tweets?accounts=pulpmx,racerxonline&limit=20 (NEW!)
 ```
 
 ---
 
 ## Additional Documentation
 
+- **Twitter Integration**: See `TWITTER_API_GUIDE.md` (NEW!)
 - **Multi-Source Usage**: See `MULTI_SOURCE_USAGE.md`
 - **App Integration**: See `APP_INTEGRATION_GUIDE.md`
 - **Detailed API Docs**: See `NEWS_API_DOCS.md`, `PODCAST_API_DOCS.md`, `VIDEOS_API_DOCS.md`
