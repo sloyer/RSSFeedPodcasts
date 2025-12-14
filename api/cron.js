@@ -460,7 +460,7 @@ export default async function handler(req, res) {
     try {
       console.log('🐦 Starting Twitter feed fetch...');
       
-      const twitterResults = await fetchTwitterFeeds(3); // Last 3 days
+      const twitterResults = await fetchTwitterFeeds(2); // Last 48 hours
       
       if (twitterResults.success) {
         results.twitter = `success: ${twitterResults.tweetsAdded} tweets from ${twitterResults.accountsProcessed} accounts`;
