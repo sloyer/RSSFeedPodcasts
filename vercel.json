@@ -34,7 +34,7 @@
       "maxDuration": 10
     },
     "api/trigger-twitter-pull.js": {
-      "maxDuration": 60
+      "maxDuration": 180
     }
   },
   "crons": [
