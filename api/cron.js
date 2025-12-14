@@ -3,6 +3,7 @@
 import { fetchAndStoreFeeds } from '../lib/fetchFeeds.js';
 import { fetchMotocrossFeeds } from '../lib/fetchMotocrossFeeds.js';
 import { fetchYouTubeVideos } from '../lib/fetchYouTubeVideos.js';
+import { fetchTwitterFeeds } from '../lib/fetchTwitter.js';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -455,7 +456,25 @@ export default async function handler(req, res) {
       console.log('❌ YouTube failed:', error.message);
     }
     
-    // STEP 4: Check for recent content and send push notifications
+    // STEP 4: Fetch Twitter feeds (NEW)
+    try {
+      console.log('🐦 Starting Twitter feed fetch...');
+      
+      const twitterResults = await fetchTwitterFeeds(3); // Last 3 days
+      
+      if (twitterResults.success) {
+        results.twitter = `success: ${twitterResults.tweetsAdded} tweets from ${twitterResults.accountsProcessed} accounts`;
+        console.log('✅ Twitter completed');
+      } else {
+        results.twitter = `error: ${twitterResults.error}`;
+        console.log('❌ Twitter failed:', twitterResults.error);
+      }
+    } catch (error) {
+      results.twitter = `error: ${error.message}`;
+      console.log('❌ Twitter failed:', error.message);
+    }
+    
+    // STEP 5: Check for recent content and send push notifications
     try {
       console.log('[PUSH] Checking for recent content to notify about...');
       

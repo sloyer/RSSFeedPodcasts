@@ -26,6 +26,15 @@
     },
     "api/migrate-youtube.js": {
       "maxDuration": 120
+    },
+    "api/tweets.js": {
+      "maxDuration": 10
+    },
+    "api/twitter/accounts.js": {
+      "maxDuration": 10
+    },
+    "api/trigger-twitter-pull.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
