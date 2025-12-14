@@ -35,12 +35,19 @@
     },
     "api/trigger-twitter-pull.js": {
       "maxDuration": 180
+    },
+    "api/cron-twitter.js": {
+      "maxDuration": 180
     }
   },
   "crons": [
     {
       "path": "/api/cron",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron-twitter",
+      "schedule": "*/10 * * * *"
     }
   ],
   "headers": [
