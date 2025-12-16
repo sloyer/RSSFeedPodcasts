@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active channels first
     const { data: channels, error: channelsError } = await supabase
       .from('youtube_channels')
-      .select('channel_id, channel_title, display_name, description')
+      .select('channel_id, channel_title, display_name, description, created_at')
       .eq('is_active', true);
     
     if (channelsError) throw channelsError;
@@ -38,6 +38,13 @@ export default async function handler(req, res) {
     // Initialize all channels
     channels.forEach(channel => {
       const channelName = channel.display_name || channel.channel_title;
+      
+      // Check if channel is new (added in last 45 days)
+      const createdDate = new Date(channel.created_at || 0);
+      const fortyFiveDaysAgo = new Date();
+      fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+      const is_new = createdDate > fortyFiveDaysAgo;
+      
       channelMap.set(channel.channel_id, {
         channel_name: channelName,
         channel_id: channel.channel_id,
@@ -46,7 +53,8 @@ export default async function handler(req, res) {
         channel_image: null,
         endpoint_url: `/api/youtube?channel_id=${encodeURIComponent(channelName.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
         description: channel.description || `Videos from ${channelName}`,
-        has_videos: false
+        has_videos: false,
+        is_new: is_new
       });
     });
     
