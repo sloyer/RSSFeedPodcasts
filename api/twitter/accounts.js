@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active Twitter accounts
     const { data: accounts, error: accountsError } = await supabase
       .from('twitter_accounts')
-      .select('username, display_name, avatar_url')
+      .select('username, display_name, avatar_url, created_at')
       .eq('is_active', true);
     
     if (accountsError) throw accountsError;
@@ -37,13 +37,20 @@ export default async function handler(req, res) {
     
     // Initialize all accounts
     accounts.forEach(account => {
+      // Check if account is new (added in last 45 days)
+      const createdDate = new Date(account.created_at || 0);
+      const fortyFiveDaysAgo = new Date();
+      fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+      const is_new = createdDate > fortyFiveDaysAgo;
+      
       accountMap.set(account.username, {
         account_name: account.display_name || account.username,
         username: account.username,
         avatar_url: account.avatar_url,
         tweet_count: 0,
         latest_tweet_date: null,
-        has_tweets: false
+        has_tweets: false,
+        is_new: is_new
       });
     });
     
@@ -83,4 +90,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
 

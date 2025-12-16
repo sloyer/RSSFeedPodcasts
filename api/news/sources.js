@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active sources first
     const { data: sources, error: sourcesError } = await supabase
       .from('motocross_feeds')
-      .select('company_name, feed_name, description')
+      .select('company_name, feed_name, description, created_at')
       .eq('is_active', true)
       .not('company_name', 'is', null);
     
@@ -38,6 +38,12 @@ export default async function handler(req, res) {
     
     // Initialize all sources
     sources.forEach(source => {
+      // Check if source is new (added in last 45 days)
+      const createdDate = new Date(source.created_at || 0);
+      const fortyFiveDaysAgo = new Date();
+      fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+      const is_new = createdDate > fortyFiveDaysAgo;
+      
       sourceMap.set(source.company_name, {
         source_name: source.company_name,
         feed_name: source.feed_name,
@@ -46,7 +52,8 @@ export default async function handler(req, res) {
         source_image: null,
         endpoint_url: `/api/articles?group_by_source=${encodeURIComponent(source.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''))}`,
         description: source.description || `Articles from ${source.company_name}`,
-        has_articles: false
+        has_articles: false,
+        is_new: is_new
       });
     });
     
