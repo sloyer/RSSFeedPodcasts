@@ -24,13 +24,20 @@ export default async function handler(req, res) {
   }
   
   try {
-    const { title, body } = req.body;
+    const { title, body, platform } = req.body;
     
     // Get all active push tokens
-    const { data: tokens, error } = await supabase
+    let query = supabase
       .from('push_tokens')
-      .select('expo_push_token')
+      .select('expo_push_token, device_platform')
       .eq('is_active', true);
+    
+    // Filter by platform if specified
+    if (platform) {
+      query = query.eq('device_platform', platform);
+    }
+    
+    const { data: tokens, error } = await query;
     
     if (error) throw error;
     
@@ -42,7 +49,7 @@ export default async function handler(req, res) {
       });
     }
     
-    console.log(`Sending test notification to ${tokens.length} devices`);
+    console.log(`Sending test notification to ${tokens.length} devices${platform ? ` (${platform} only)` : ''}`);
     
     // Build messages
     const messages = tokens.map(t => ({
@@ -76,7 +83,8 @@ export default async function handler(req, res) {
     
     return res.status(200).json({
       success: true,
-      message: `Sent test notification to ${totalSent} devices`,
+      message: `Sent test notification to ${totalSent} devices${platform ? ` (${platform})` : ''}`,
+      platform: platform || 'all',
       sent: totalSent
     });
     
