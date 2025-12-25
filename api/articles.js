@@ -27,8 +27,11 @@ export default async function handler(req, res) {
         .order('published_date', { ascending: false });
 
       // NEW: Multi-source filtering
+      // Uses pipe (|) as delimiter to handle source names with commas (e.g., "keefer, Inc Testing")
+      // Falls back to comma delimiter for backward compatibility if no pipes found
       if (sources) {
-        const sourceList = sources.split(',').map(s => s.trim());
+        const delimiter = sources.includes('|') ? '|' : ',';
+        const sourceList = sources.split(delimiter).map(s => s.trim()).filter(s => s.length > 0);
         
         // Filter by multiple companies using exact names
         if (sourceList.length > 0) {

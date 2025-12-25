@@ -17,7 +17,8 @@ export default async function handler(req, res) {
         offset = 0, 
         search, 
         company,
-        group_by_source = 'false'
+        group_by_source = 'false',
+        sources // Multi-source filtering with pipe (|) delimiter
       } = req.query;
 
       let query = supabase
@@ -25,8 +26,19 @@ export default async function handler(req, res) {
         .select('*')
         .order('published_date', { ascending: false });
 
+      // Multi-source filtering
+      // Uses pipe (|) as delimiter to handle source names with commas (e.g., "keefer, Inc Testing")
+      // Falls back to comma delimiter for backward compatibility if no pipes found
+      if (sources) {
+        const delimiter = sources.includes('|') ? '|' : ',';
+        const sourceList = sources.split(delimiter).map(s => s.trim()).filter(s => s.length > 0);
+        
+        if (sourceList.length > 0) {
+          query = query.in('company', sourceList);
+        }
+      }
       // Dynamic source mapping from database using existing fields
-      if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
+      else if (group_by_source && group_by_source !== 'false' && group_by_source !== 'true') {
         try {
           // Get all active feeds and find match by generated API code
           const { data: allFeeds, error: feedError } = await supabase
