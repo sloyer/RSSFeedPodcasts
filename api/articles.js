@@ -27,38 +27,8 @@ export default async function handler(req, res) {
         .order('published_date', { ascending: false });
 
       // NEW: Multi-source filtering
-      // Smart delimiter handling: supports pipe (|) for names with commas
       if (sources) {
-        let sourceList;
-        
-        // If pipe delimiter is present, use it (explicitly multi-source)
-        if (sources.includes('|')) {
-          sourceList = sources.split('|').map(s => s.trim()).filter(s => s.length > 0);
-        } else {
-          // For comma delimiter, validate that split values exist as companies
-          // This handles names with commas like "keefer, Inc Testing"
-          const commaSplit = sources.split(',').map(s => s.trim()).filter(s => s.length > 0);
-          
-          // Get all valid company names from database
-          const { data: validCompanies } = await supabase
-            .from('motocross_feeds')
-            .select('company_name')
-            .eq('is_active', true);
-          
-          const validNames = new Set(validCompanies?.map(f => f.company_name) || []);
-          
-          // Check if ALL comma-split values are valid companies
-          const allValid = commaSplit.every(s => validNames.has(s));
-          
-          if (allValid && commaSplit.length > 0) {
-            // All values are valid companies - use comma split
-            sourceList = commaSplit;
-          } else {
-            // Some values aren't valid - treat entire string as single source
-            // This handles "keefer, Inc Testing" being split incorrectly
-            sourceList = [sources.trim()];
-          }
-        }
+        const sourceList = sources.split(',').map(s => s.trim());
         
         // Filter by multiple companies using exact names
         if (sourceList.length > 0) {
