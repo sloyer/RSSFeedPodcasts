@@ -27,12 +27,36 @@ export default async function handler(req, res) {
         .order('published_date', { ascending: false });
 
       // Multi-source filtering
-      // Uses pipe (|) as delimiter to handle source names with commas (e.g., "keefer, Inc Testing")
-      // Falls back to comma delimiter for backward compatibility if no pipes found
+      // Uses pipe (|) as primary delimiter to handle source names with commas (e.g., "keefer, Inc Testing")
+      // If no pipe found, first check if the entire string is a valid source name before comma-splitting
       if (sources) {
-        const delimiter = sources.includes('|') ? '|' : ',';
-        const sourceList = sources.split(delimiter).map(s => s.trim()).filter(s => s.length > 0);
+        let sourceList;
         
+        if (sources.includes('|')) {
+          // Pipe delimiter - split on pipes
+          sourceList = sources.split('|').map(s => s.trim()).filter(s => s.length > 0);
+        } else if (sources.includes(',')) {
+          // Has comma - could be multiple sources OR a single source with comma in name
+          // First check if the entire string matches a company name
+          const { data: exactMatch } = await supabase
+            .from('articles')
+            .select('company')
+            .eq('company', sources.trim())
+            .limit(1);
+          
+          if (exactMatch && exactMatch.length > 0) {
+            // Entire string is a valid source name (contains comma)
+            sourceList = [sources.trim()];
+          } else {
+            // Split on commas (multiple sources)
+            sourceList = sources.split(',').map(s => s.trim()).filter(s => s.length > 0);
+          }
+        } else {
+          // Single source, no delimiters
+          sourceList = [sources.trim()];
+        }
+        
+        // Filter by multiple companies using exact names
         if (sourceList.length > 0) {
           query = query.in('company', sourceList);
         }
