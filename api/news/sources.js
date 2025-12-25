@@ -25,13 +25,11 @@ export default async function handler(req, res) {
     if (sourcesError) throw sourcesError;
     
     // Get all articles for these sources in one query
-    // Note: Supabase default limit is 1000, so we need to set a higher limit
     const { data: articles, error: articlesError } = await supabase
       .from('articles')
       .select('company, published_date, image_url')
       .in('company', sources.map(s => s.company_name))
-      .order('published_date', { ascending: false })
-      .limit(10000);
+      .order('published_date', { ascending: false });
     
     if (articlesError) throw articlesError;
     
