@@ -48,6 +48,10 @@
     {
       "path": "/api/cron-twitter",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron-inactive-reminder",
+      "schedule": "0 10,18 * * *"
     }
   ],
   "headers": [
