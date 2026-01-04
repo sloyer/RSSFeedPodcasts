@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { q, limit = 50 } = req.query;
+    const { q, show, limit = 50 } = req.query;
 
     if (!q || q.trim().length < 2) {
       return res.status(400).json({ 
@@ -32,14 +32,20 @@ export default async function handler(req, res) {
     const searchQuery = q.trim();
     const searchLimit = Math.min(parseInt(limit), 100); // Cap at 100
 
-    // Use ilike for simple, fast matching
-    // Searches across title, description, and podcast_name
-    const { data, error } = await supabase
+    // Build query - search across title, description, and podcast_name
+    let query = supabase
       .from('podcasts')
       .select('*')
       .or(`podcast_title.ilike.%${searchQuery}%,podcast_description.ilike.%${searchQuery}%,podcast_name.ilike.%${searchQuery}%`)
       .order('podcast_date', { ascending: false })
       .limit(searchLimit);
+
+    // Filter by show if provided
+    if (show) {
+      query = query.eq('podcast_name', show);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
