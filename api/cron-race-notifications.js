@@ -150,7 +150,7 @@ export default async function handler(req, res) {
         const notificationId = `race-coverage-${event.id}`;
         const title = `${seriesName} Round ${event.round}`;
         const subtitle = location;  // iOS only
-        const body = `Live timing is starting - ${event.venue}`;
+        const body = `Qualifying is starting - ${event.venue}`;
         
         const sent = await sendRaceNotification(notificationId, title, subtitle, body, {
           type: 'race_coverage_start',

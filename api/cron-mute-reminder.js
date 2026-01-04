@@ -1,5 +1,5 @@
-// api/cron-mute-reminder.js - Send mute reminder on Fridays before race weekends
-// Runs Friday 12:00 UTC (3AM AKST) when mute banner shows
+// api/cron-mute-reminder.js - Send mute reminders before race weekends
+// Runs: Friday 12:00 UTC AND Saturday 14:00 UTC (early morning before coverage)
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -25,45 +25,54 @@ export default async function handler(req, res) {
   
   try {
     const now = new Date();
-    console.log(`[MUTE REMINDER] Cron started at ${now.toISOString()}`);
+    const dayOfWeek = now.getUTCDay(); // 0=Sun, 5=Fri, 6=Sat
     
-    // Check if there's a race this weekend (Saturday)
-    // Get tomorrow (Saturday) and check for events
-    const saturday = new Date(now);
-    saturday.setUTCDate(saturday.getUTCDate() + 1); // Friday -> Saturday
-    saturday.setUTCHours(0, 0, 0, 0);
+    console.log(`[MUTE REMINDER] Cron started at ${now.toISOString()} (day: ${dayOfWeek})`);
     
-    const sunday = new Date(saturday);
-    sunday.setUTCDate(sunday.getUTCDate() + 1);
-    sunday.setUTCHours(23, 59, 59, 999);
+    // Determine if this is Friday or Saturday run
+    const isFriday = dayOfWeek === 5;
+    const isSaturday = dayOfWeek === 6;
     
-    const { data: weekendRaces, error: raceError } = await supabase
+    if (!isFriday && !isSaturday) {
+      console.log('[MUTE REMINDER] Not Friday or Saturday, skipping');
+      return res.status(200).json({ success: true, message: 'Not a reminder day', sent: 0 });
+    }
+    
+    // Find race: on Friday look for Saturday, on Saturday look for today
+    const raceDay = new Date(now);
+    if (isFriday) {
+      raceDay.setUTCDate(raceDay.getUTCDate() + 1); // Friday -> Saturday
+    }
+    raceDay.setUTCHours(0, 0, 0, 0);
+    
+    const raceDayEnd = new Date(raceDay);
+    raceDayEnd.setUTCHours(23, 59, 59, 999);
+    
+    const { data: races, error: raceError } = await supabase
       .from('race_events')
       .select('*')
-      .gte('coverage_start_utc', saturday.toISOString())
-      .lte('coverage_start_utc', sunday.toISOString())
+      .gte('coverage_start_utc', raceDay.toISOString())
+      .lte('coverage_start_utc', raceDayEnd.toISOString())
       .eq('is_tbd', false);
     
     if (raceError) throw raceError;
     
-    if (!weekendRaces || weekendRaces.length === 0) {
-      console.log('[MUTE REMINDER] No races this weekend, skipping notification');
-      return res.status(200).json({
-        success: true,
-        message: 'No races this weekend',
-        sent: 0
-      });
+    if (!races || races.length === 0) {
+      console.log('[MUTE REMINDER] No race found, skipping');
+      return res.status(200).json({ success: true, message: 'No race today/tomorrow', sent: 0 });
     }
     
-    const race = weekendRaces[0];
+    const race = races[0];
     const seriesName = race.series === 'supercross' ? 'Supercross' : 
                        race.series === 'motocross' ? 'Pro Motocross' : 'SMX';
     
-    console.log(`[MUTE REMINDER] Race this weekend: ${seriesName} Round ${race.round} at ${race.venue}`);
+    // Different notification ID and message for each day
+    const reminderType = isFriday ? 'friday' : 'saturday';
+    const notificationId = `mute-${reminderType}-${race.id}`;
     
-    // Check if we already sent this reminder
-    const notificationId = `mute-reminder-${race.id}`;
+    console.log(`[MUTE REMINDER] ${reminderType} reminder for ${seriesName} Round ${race.round}`);
     
+    // Check if already sent
     const { data: alreadySent } = await supabase
       .from('sent_notifications')
       .select('id')
@@ -72,12 +81,8 @@ export default async function handler(req, res) {
       .single();
     
     if (alreadySent) {
-      console.log('[MUTE REMINDER] Already sent for this race');
-      return res.status(200).json({
-        success: true,
-        message: 'Already sent mute reminder for this race',
-        sent: 0
-      });
+      console.log(`[MUTE REMINDER] Already sent ${reminderType} reminder`);
+      return res.status(200).json({ success: true, message: 'Already sent', sent: 0 });
     }
     
     // Get all active push tokens
@@ -90,20 +95,22 @@ export default async function handler(req, res) {
     
     if (!tokens || tokens.length === 0) {
       console.log('[MUTE REMINDER] No active push tokens');
-      return res.status(200).json({
-        success: true,
-        message: 'No active push tokens',
-        sent: 0
-      });
+      return res.status(200).json({ success: true, message: 'No tokens', sent: 0 });
     }
     
-    console.log(`[MUTE REMINDER] Sending to ${tokens.length} devices`);
+    // Build message based on day
+    const title = isFriday 
+      ? `${seriesName} Round ${race.round} Tomorrow`
+      : `${seriesName} Round ${race.round} Today`;
     
-    // Build messages - opens Settings tab when tapped
+    const body = 'Tap to mute notifications and avoid spoilers';
+    
+    console.log(`[MUTE REMINDER] Sending "${title}" to ${tokens.length} devices`);
+    
     const messages = tokens.map(t => ({
       to: t.expo_push_token,
-      title: `${seriesName} Round ${race.round} Tomorrow`,
-      body: 'Tap to mute notifications and avoid spoilers',
+      title: title,
+      body: body,
       data: {
         type: 'navigate',
         route: '/(tabs)/settings'
@@ -115,7 +122,7 @@ export default async function handler(req, res) {
       _displayInForeground: true
     }));
     
-    // Send in chunks of 100
+    // Send in chunks
     const chunks = chunkArray(messages, 100);
     let totalSent = 0;
     
@@ -143,7 +150,7 @@ export default async function handler(req, res) {
         content_id: notificationId,
         content_type: 'mute_reminder',
         feed_name: 'mute_reminder',
-        title: `${seriesName} Round ${race.round} - Mute Reminder`,
+        title: title,
         recipient_count: totalSent,
         sent_at: new Date().toISOString()
       }, {
@@ -151,21 +158,17 @@ export default async function handler(req, res) {
         ignoreDuplicates: true
       });
     
-    console.log(`[MUTE REMINDER] Sent to ${totalSent} devices`);
+    console.log(`[MUTE REMINDER] Sent ${reminderType} reminder to ${totalSent} devices`);
     
     return res.status(200).json({
       success: true,
-      message: `Mute reminder sent to ${totalSent} devices`,
+      message: `${reminderType} mute reminder sent`,
       race: `${seriesName} Round ${race.round}`,
       sent: totalSent
     });
     
   } catch (error) {
     console.error('[MUTE REMINDER] Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
-
