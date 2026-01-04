@@ -38,6 +38,12 @@
     },
     "api/cron-twitter.js": {
       "maxDuration": 180
+    },
+    "api/race-schedule.js": {
+      "maxDuration": 10
+    },
+    "api/cron-race-notifications.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -48,6 +54,10 @@
     {
       "path": "/api/cron-inactive-reminder",
       "schedule": "0 10,18 * * *"
+    },
+    {
+      "path": "/api/cron-race-notifications",
+      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [
