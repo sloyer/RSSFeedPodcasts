@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     }
 
     const searchQuery = q.trim();
-    const searchLimit = Math.min(parseInt(limit), 100); // Cap at 100
+    const searchLimit = parseInt(limit) || 50;
 
     // Build query - search across title, description, and podcast_name
     let query = supabase
