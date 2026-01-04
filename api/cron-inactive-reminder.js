@@ -59,11 +59,13 @@ export default async function handler(req, res) {
     const messages = usersToNotify.map(user => ({
       to: user.expo_push_token,
       title: "🏍️ Miss us?",
-      body: "Don't forget to get your moto fix!",
+      subtitle: "Don't forget to get your moto fix!",  // iOS shows this
+      body: "Don't forget to get your moto fix!",      // Android uses body
       sound: 'default',
       badge: 1,
-      priority: 'default',
-      channelId: 'default'
+      priority: 'high',
+      channelId: 'default',
+      _displayInForeground: true
     }));
 
     // Send in batches of 100 (Expo limit)

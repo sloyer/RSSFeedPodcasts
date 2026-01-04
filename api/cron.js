@@ -323,9 +323,9 @@ async function sendPushNotifications(newContent) {
         
         return {
           to: t.expo_push_token,
-          title: title,           // Line 1: "Racer X Article"
-          subtitle: subtitle,     // Line 2: "Jett Lawrence Dominates 2025 Supercross..." (iOS only)
-          body: '',              // Empty - who cares about expanded view
+          title: title,           // Line 1: "Article: Racer X"
+          subtitle: subtitle,     // Line 2: iOS only - shows in collapsed view
+          body: subtitle,         // Android uses body instead of subtitle
           data: {
             type: item.type,
             id: item.id,
@@ -336,7 +336,8 @@ async function sendPushNotifications(newContent) {
           sound: 'default',
           badge: 1,
           priority: 'high',
-          channelId: 'default'  // Android notification channel
+          channelId: 'default',   // Android notification channel
+          _displayInForeground: true
         };
       });
 
@@ -360,16 +361,19 @@ async function sendPushNotifications(newContent) {
         }
       }
 
-      // Log as sent
+      // Log as sent (upsert to handle race conditions - if already exists, skip)
       await supabase
         .from('sent_notifications')
-        .insert({
+        .upsert({
           content_id: item.id,
           content_type: item.type,
           feed_name: item.feedName,
           title: item.title,
           recipient_count: tokens.length,
           sent_at: new Date().toISOString()
+        }, {
+          onConflict: 'content_id,feed_name',
+          ignoreDuplicates: true
         });
 
       // NEW: Tweet ONLY THE FIRST (newest) item per cron run
