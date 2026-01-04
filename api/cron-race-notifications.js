@@ -153,7 +153,8 @@ export default async function handler(req, res) {
         const body = `Qualifying is starting - ${event.venue}`;
         
         const sent = await sendRaceNotification(notificationId, title, subtitle, body, {
-          type: 'race_coverage_start',
+          type: 'navigate',
+          route: '/(tabs)/live',
           eventId: event.id,
           round: event.round,
           series: event.series,
@@ -200,7 +201,8 @@ export default async function handler(req, res) {
         const body = `Main events starting soon - ${event.venue}`;
         
         const sent = await sendRaceNotification(notificationId, title, subtitle, body, {
-          type: 'race_mains_start',
+          type: 'navigate',
+          route: '/(tabs)/live',
           eventId: event.id,
           round: event.round,
           series: event.series,
