@@ -1,5 +1,5 @@
 // api/cron-mute-reminder.js - Send mute reminders before race weekends
-// Runs: Friday 12:00 UTC AND Saturday 14:00 UTC (early morning before coverage)
+// Runs: Friday 12:00 UTC AND Saturday 12:00 UTC (early morning before coverage)
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
