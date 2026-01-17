@@ -58,7 +58,7 @@ export default async function handler(req, res) {
     // Build Expo push messages
     const messages = usersToNotify.map(user => ({
       to: user.expo_push_token,
-      title: "🏍️ Miss us?",
+      title: "Miss us?",
       subtitle: "Don't forget to get your moto fix!",  // iOS shows this
       body: "Don't forget to get your moto fix!",      // Android uses body
       sound: 'default',
