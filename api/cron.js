@@ -267,19 +267,34 @@ async function sendPushNotifications(newContent) {
       const feedType = item.type === 'article' ? 'news' : 
                        item.type === 'video' ? 'youtube' : 'podcasts';
 
-      const { data: preferences } = await supabase
+      // Primary: match by feed_id (stable, won't break if names change)
+      let { data: preferences } = await supabase
         .from('notification_preferences')
         .select('user_id')
-        .eq('feed_name', item.feedName)
+        .eq('feed_id', item.feedId)
         .eq('feed_type', feedType)
         .eq('notifications_enabled', true);
 
+      let matchedBy = 'feed_id';
+
+      // Fallback: match by feed_name for legacy rows that may not have correct feed_id
+      if ((!preferences || preferences.length === 0) && item.feedName) {
+        const fallback = await supabase
+          .from('notification_preferences')
+          .select('user_id')
+          .eq('feed_name', item.feedName)
+          .eq('feed_type', feedType)
+          .eq('notifications_enabled', true);
+        preferences = fallback.data;
+        matchedBy = 'feed_name';
+      }
+
       if (!preferences || preferences.length === 0) {
-        console.log(`[PUSH] No subscribers for ${item.feedName}`);
+        console.log(`[PUSH] No subscribers for ${item.feedName} (feedId: ${item.feedId})`);
         continue;
       }
 
-      console.log(`[PUSH] Found ${preferences.length} subscribers for ${item.feedName}`);
+      console.log(`[PUSH] Found ${preferences.length} subscribers for ${item.feedName} (matched by ${matchedBy})`);
 
       // Get push tokens
       const userIds = preferences.map(p => p.user_id);
@@ -392,6 +407,47 @@ async function sendPushNotifications(newContent) {
 }
 
 // ============================================================================
+// FEED ID LOOKUP — maps content feed names to stable database IDs
+// ============================================================================
+
+async function loadFeedIdMaps() {
+  const maps = { podcasts: {}, news: {}, youtube: {} };
+
+  try {
+    const [rssResult, motoResult, ytResult] = await Promise.all([
+      supabase.from('rss_feeds').select('id, feed_name').eq('is_active', true),
+      supabase.from('motocross_feeds').select('id, company_name').eq('is_active', true),
+      supabase.from('youtube_channels').select('id, channel_id, channel_title, display_name').eq('is_active', true),
+    ]);
+
+    if (rssResult.data) {
+      for (const f of rssResult.data) {
+        maps.podcasts[f.feed_name] = f.id.toString();
+      }
+    }
+
+    if (motoResult.data) {
+      for (const f of motoResult.data) {
+        maps.news[f.company_name] = f.id.toString();
+      }
+    }
+
+    if (ytResult.data) {
+      for (const f of ytResult.data) {
+        maps.youtube[f.channel_title] = f.id.toString();
+        if (f.display_name) maps.youtube[f.display_name] = f.id.toString();
+      }
+    }
+
+    console.log(`[PUSH] Feed ID maps loaded — podcasts: ${Object.keys(maps.podcasts).length}, news: ${Object.keys(maps.news).length}, youtube: ${Object.keys(maps.youtube).length}`);
+  } catch (error) {
+    console.error('[PUSH] Error loading feed ID maps:', error);
+  }
+
+  return maps;
+}
+
+// ============================================================================
 // MAIN HANDLER
 // ============================================================================
 
@@ -464,6 +520,7 @@ export default async function handler(req, res) {
     try {
       console.log('[PUSH] Checking for recent content to notify about...');
       
+      const feedIdMaps = await loadFeedIdMaps();
       const recentContent = [];
       const API_BASE_URL = 'https://rss-feed-podcasts.vercel.app';
       
@@ -478,11 +535,12 @@ export default async function handler(req, res) {
           console.log(`[PUSH] Found ${recentEpisodes.length} recent podcast episodes`);
           
           recentEpisodes.forEach(e => {
+            const feedName = e.show_name || e.podcast_name;
             recentContent.push({
               id: String(e.id || e.guid),
-              feedId: String(e.id),
+              feedId: feedIdMaps.podcasts[feedName] || String(e.id),
               title: e.podcast_title || e.title,
-              feedName: e.show_name || e.podcast_name,
+              feedName,
               type: 'podcast',
               url: e.feed_url || e.link,
               image: e.podcast_image || e.image_url
@@ -506,7 +564,7 @@ export default async function handler(req, res) {
           recentArticles.forEach(a => {
             recentContent.push({
               id: String(a.id),
-              feedId: String(a.id),
+              feedId: feedIdMaps.news[a.company] || String(a.id),
               title: a.title,
               feedName: a.company,
               type: 'article',
@@ -532,7 +590,7 @@ export default async function handler(req, res) {
           recentVideos.forEach(v => {
             recentContent.push({
               id: String(v.id),
-              feedId: String(v.id),
+              feedId: feedIdMaps.youtube[v.channelName] || String(v.id),
               title: v.title,
               feedName: v.channelName,
               type: 'video',
