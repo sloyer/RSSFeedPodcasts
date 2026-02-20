@@ -18,27 +18,18 @@ export default async function handler(req, res) {
     // Get podcast show descriptions from rss_feeds using feed_url as the join key
     const { data: feedDescriptions } = await supabase
       .from('rss_feeds')
-      .select('feed_url, feed_name, display_name, description, created_at')
+      .select('id, feed_url, feed_name, display_name, description, created_at')
       .eq('is_active', true);
     
     // Create maps by feed_url (the reliable join key)
-    const descriptionByUrl = new Map();
-    const descriptionByName = new Map();
-    const createdAtByUrl = new Map();
-    const createdAtByName = new Map();
+    const feedMetaByUrl = new Map();
+    const feedMetaByName = new Map();
     
     feedDescriptions?.forEach(feed => {
-      descriptionByUrl.set(feed.feed_url, feed.description);
-      createdAtByUrl.set(feed.feed_url, feed.created_at);
-      
-      // Also map by feed_name and display_name for fallback matching
-      descriptionByName.set(feed.feed_name, feed.description);
-      createdAtByName.set(feed.feed_name, feed.created_at);
-      
-      if (feed.display_name) {
-        descriptionByName.set(feed.display_name, feed.description);
-        createdAtByName.set(feed.display_name, feed.created_at);
-      }
+      const meta = { id: feed.id, description: feed.description, created_at: feed.created_at };
+      feedMetaByUrl.set(feed.feed_url, meta);
+      feedMetaByName.set(feed.feed_name, meta);
+      if (feed.display_name) feedMetaByName.set(feed.display_name, meta);
     });
     
     // SIMPLE APPROACH: Use podcast_name from podcasts table as source of truth
@@ -57,27 +48,22 @@ export default async function handler(req, res) {
       const showName = episode.podcast_name; // THIS IS THE STANDARD FIELD
       
       if (!showsMap[showName]) {
-        // Try to find description and created_at by feed_url first, then by name
-        let description = descriptionByUrl.get(episode.feed_url);
-        let createdAt = createdAtByUrl.get(episode.feed_url);
-        if (!description) {
-          description = descriptionByName.get(showName);
-          createdAt = createdAtByName.get(showName);
-        }
+        const meta = feedMetaByUrl.get(episode.feed_url) || feedMetaByName.get(showName) || {};
         
         // Check if show is new (added in last 45 days)
-        const createdDate = new Date(createdAt || 0);
+        const createdDate = new Date(meta.created_at || 0);
         const fortyFiveDaysAgo = new Date();
         fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
         const is_new = createdDate > fortyFiveDaysAgo;
         
         showsMap[showName] = {
+          id: meta.id ? meta.id.toString() : null,
           show_name: showName,
           episode_count: 0,
           latest_episode_date: null,
           show_image: episode.podcast_image,
           endpoint_url: `/api/podcasts?podcast_name=${encodeURIComponent(showName)}`,
-          description: description || null,
+          description: meta.description || null,
           has_episodes: true,
           is_new: is_new
         };

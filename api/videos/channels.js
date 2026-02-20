@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active channels first
     const { data: channels, error: channelsError } = await supabase
       .from('youtube_channels')
-      .select('channel_id, channel_title, display_name, description, created_at')
+      .select('id, channel_id, channel_title, display_name, description, created_at')
       .eq('is_active', true);
     
     if (channelsError) throw channelsError;
@@ -46,6 +46,7 @@ export default async function handler(req, res) {
       const is_new = createdDate > fortyFiveDaysAgo;
       
       channelMap.set(channel.channel_id, {
+        id: channel.id.toString(),
         channel_name: channelName,
         channel_id: channel.channel_id,
         video_count: 0,

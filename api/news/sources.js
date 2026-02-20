@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Get all active sources first
     const { data: sources, error: sourcesError } = await supabase
       .from('motocross_feeds')
-      .select('company_name, feed_name, description, created_at')
+      .select('id, company_name, feed_name, description, created_at')
       .eq('is_active', true)
       .not('company_name', 'is', null);
     
@@ -45,6 +45,7 @@ export default async function handler(req, res) {
       const is_new = createdDate > fortyFiveDaysAgo;
       
       sourceMap.set(source.company_name, {
+        id: source.id.toString(),
         source_name: source.company_name,
         feed_name: source.feed_name,
         article_count: 0,
