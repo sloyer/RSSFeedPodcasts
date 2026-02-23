@@ -18,12 +18,18 @@ export default async function handler(req, res) {
     const fourteenHoursAgo = new Date();
     fourteenHoursAgo.setHours(fourteenHoursAgo.getHours() - 14);
 
-    // Find users who haven't been active in 14+ hours
-    // and haven't received a reminder in the last 24 hours
+    const now = new Date().toISOString();
+
+    // Find users who haven't been active in 14+ hours.
+    // Skip users who:
+    //   - have globally disabled all notifications (notifications_globally_enabled = false)
+    //   - are currently muted (muted_until is set and still in the future)
     const { data: inactiveUsers, error: queryError } = await supabase
       .from('push_tokens')
       .select('user_id, expo_push_token, last_active, last_reminder_sent')
       .eq('is_active', true)
+      .eq('notifications_globally_enabled', true)
+      .or(`muted_until.is.null,muted_until.lt.${now}`)
       .lt('last_active', fourteenHoursAgo.toISOString());
 
     if (queryError) throw queryError;

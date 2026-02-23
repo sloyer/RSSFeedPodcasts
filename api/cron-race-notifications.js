@@ -42,11 +42,16 @@ async function sendRaceNotification(notificationId, title, subtitle, body, event
     return 0;
   }
   
-  // Get all active push tokens (race notifications go to everyone)
+  // Get push tokens for users who have notifications enabled and are not muted.
+  // Race notifications are high-value alerts, but users who globally disabled
+  // notifications or who tapped "Mute for 24 hours" must still be respected.
+  const now = new Date().toISOString();
   const { data: tokens, error: tokenError } = await supabase
     .from('push_tokens')
     .select('expo_push_token')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('notifications_globally_enabled', true)
+    .or(`muted_until.is.null,muted_until.lt.${now}`);
   
   if (tokenError) throw tokenError;
   

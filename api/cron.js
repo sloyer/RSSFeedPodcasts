@@ -296,13 +296,16 @@ async function sendPushNotifications(newContent) {
 
       console.log(`[PUSH] Found ${preferences.length} subscribers for ${item.feedName} (matched by ${matchedBy})`);
 
-      // Get push tokens
+      // Get push tokens, excluding muted users so "Mute for 24h" is respected
+      // for content notifications as well.
       const userIds = preferences.map(p => p.user_id);
+      const now = new Date().toISOString();
       const { data: tokens } = await supabase
         .from('push_tokens')
         .select('expo_push_token')
         .in('user_id', userIds)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .or(`muted_until.is.null,muted_until.lt.${now}`);
 
       if (!tokens || tokens.length === 0) {
         console.log(`[PUSH] No active tokens`);

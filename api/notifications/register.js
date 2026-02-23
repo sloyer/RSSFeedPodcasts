@@ -44,6 +44,11 @@ export default async function handler(req, res) {
     console.log(`[REGISTER] User: ${userId}, Preferences: ${preferences?.length || 0}`);
 
     // Step 1: Upsert push token
+    // notifications_globally_enabled reflects whether the user has ANY feeds enabled.
+    // When the preferences array is empty the user has turned off all notifications,
+    // so cron jobs (inactive reminder, race alerts) should skip them entirely.
+    const globallyEnabled = Array.isArray(preferences) && preferences.length > 0;
+
     const { error: tokenError } = await supabase
       .from('push_tokens')
       .upsert({
@@ -51,7 +56,8 @@ export default async function handler(req, res) {
         expo_push_token: expoPushToken,
         device_platform: platform || 'ios',
         last_active: new Date().toISOString(),
-        is_active: true
+        is_active: true,
+        notifications_globally_enabled: globallyEnabled
       }, {
         onConflict: 'user_id'
       });
