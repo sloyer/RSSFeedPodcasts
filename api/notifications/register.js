@@ -49,6 +49,13 @@ export default async function handler(req, res) {
     // so cron jobs (inactive reminder, race alerts) should skip them entirely.
     const globallyEnabled = Array.isArray(preferences) && preferences.length > 0;
 
+    // Conflict on expo_push_token — the table has a unique constraint on both
+    // user_id and expo_push_token. Conflicting on the token means:
+    //   - same user, same token  → UPDATE (normal re-registration)
+    //   - new user, same token   → UPDATE user_id (device transfer)
+    //   - same/new user, new token → INSERT (new device or token rotation)
+    // This avoids the 23505 duplicate key error that occurred when conflicting
+    // only on user_id while the token already existed in a separate row.
     const { error: tokenError } = await supabase
       .from('push_tokens')
       .upsert({
@@ -59,7 +66,7 @@ export default async function handler(req, res) {
         is_active: true,
         notifications_globally_enabled: globallyEnabled
       }, {
-        onConflict: 'user_id'
+        onConflict: 'expo_push_token'
       });
 
     if (tokenError) {
