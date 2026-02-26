@@ -135,3 +135,60 @@ ORDER BY feed_type, feed_name;
 **Good rows:** `feed_id` is a small integer string like `"3"`, `"7"`, `"12"`
 
 **Bad rows:** `feed_id` is a content item ID (large number), a YouTube channel ID (`UCxxxxxxx`), null, or a placeholder
+
+---
+
+## Update: `id` Added to Individual Endpoints (Feb 19, 2026)
+
+The app was generating fake sequential feed IDs (`"1"`, `"2"`, `"3"` based on array index) because the individual discovery endpoints didn't return the real database primary key. The workaround in v1.4.5 was to fetch `/api/feed-sources` separately and match by name.
+
+**Fix:** The database `id` is now included directly in all three endpoints:
+
+| Endpoint | New field | Source table |
+|---|---|---|
+| `/api/news/sources` | `id` | `motocross_feeds.id` |
+| `/api/podcasts/shows` | `id` | `rss_feeds.id` |
+| `/api/videos/channels` | `id` | `youtube_channels.id` |
+
+### Example responses
+
+**`GET /api/news/sources`** — each source now includes `id`:
+```json
+{
+  "id": "5",
+  "source_name": "Racer X",
+  "article_count": 142,
+  "latest_article_date": "2026-02-19T...",
+  ...
+}
+```
+
+**`GET /api/podcasts/shows`** — each show now includes `id`:
+```json
+{
+  "id": "3",
+  "show_name": "PulpMX Show",
+  "episode_count": 87,
+  "latest_episode_date": "2026-02-18T...",
+  ...
+}
+```
+
+**`GET /api/videos/channels`** — each channel now includes `id`:
+```json
+{
+  "id": "12",
+  "channel_name": "Swap Moto Live",
+  "video_count": 203,
+  "latest_video_date": "2026-02-19T...",
+  ...
+}
+```
+
+### What the app can do now
+
+The app can read `source.id`, `show.id`, or `channel.id` directly from the endpoints it already calls — no need for the extra `/api/feed-sources` request or name-based matching. This eliminates the one-extra-HTTP-request workaround from v1.4.5.
+
+### Backward compatible
+
+The `id` field is purely additive. Existing app versions that don't read it are unaffected.
