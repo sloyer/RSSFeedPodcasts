@@ -14,13 +14,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Calculate 14 hours ago
-    const fourteenHoursAgo = new Date();
-    fourteenHoursAgo.setHours(fourteenHoursAgo.getHours() - 14);
-
     const now = new Date().toISOString();
 
-    // Find users who haven't been active in 14+ hours.
+    // Only remind users who haven't opened the app in 24+ hours
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
     // Skip users who:
     //   - have globally disabled all notifications (notifications_globally_enabled = false)
     //   - are currently muted (muted_until is set and still in the future)
@@ -30,7 +29,7 @@ export default async function handler(req, res) {
       .eq('is_active', true)
       .eq('notifications_globally_enabled', true)
       .or(`muted_until.is.null,muted_until.lt.${now}`)
-      .lt('last_active', fourteenHoursAgo.toISOString());
+      .lt('last_active', twentyFourHoursAgo.toISOString());
 
     if (queryError) throw queryError;
 
@@ -42,13 +41,14 @@ export default async function handler(req, res) {
       });
     }
 
-    // Filter out users who received a reminder in the last 24 hours
-    const twentyFourHoursAgo = new Date();
-    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    // Filter out users who already received a reminder in the last 24 hours
+    // (prevents sending a second reminder if the cron somehow fires twice)
+    const reminderCutoff = new Date();
+    reminderCutoff.setHours(reminderCutoff.getHours() - 24);
 
     const usersToNotify = inactiveUsers.filter(user => {
       if (!user.last_reminder_sent) return true;
-      return new Date(user.last_reminder_sent) < twentyFourHoursAgo;
+      return new Date(user.last_reminder_sent) < reminderCutoff;
     });
 
     if (usersToNotify.length === 0) {
