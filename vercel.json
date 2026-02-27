@@ -47,6 +47,9 @@
     },
     "api/cron-mute-reminder.js": {
       "maxDuration": 30
+    },
+    "api/cron-race-schedule-notifications.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -65,6 +68,10 @@
     {
       "path": "/api/cron-mute-reminder",
       "schedule": "0 12 * * 5,6"
+    },
+    {
+      "path": "/api/cron-race-schedule-notifications",
+      "schedule": "*/15 * * * *"
     }
   ],
   "headers": [
