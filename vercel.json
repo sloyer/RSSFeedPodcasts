@@ -50,6 +50,15 @@
     },
     "api/cron-race-schedule-notifications.js": {
       "maxDuration": 60
+    },
+    "api/game/player.js": {
+      "maxDuration": 10
+    },
+    "api/game/scores.js": {
+      "maxDuration": 10
+    },
+    "api/game/leaderboard.js": {
+      "maxDuration": 10
     }
   },
   "crons": [
