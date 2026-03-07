@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { trackId, type, period } = req.query;
+    const { trackId, type, period, limit } = req.query;
 
     // Validate required params
     if (trackId === undefined || !type || !period) {
@@ -87,11 +87,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // Convert to array, sort, and take top 5
+    const limitNum = Math.min(parseInt(limit, 10) || 10, 100);
+
+    // Convert to array, sort, and take top N
     const leaderboard = Array.from(playerBests.entries())
       .map(([name, ms]) => ({ name, ms }))
       .sort((a, b) => a.ms - b.ms)
-      .slice(0, 5);
+      .slice(0, limitNum);
 
     return res.status(200).json(leaderboard);
 
