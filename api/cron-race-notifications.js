@@ -9,6 +9,12 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// Returns true if the current time is between 1 AM and 7 AM Alaska Standard Time (UTC-9)
+function isAlaskaQuietHours() {
+  const alaskaHour = (new Date().getUTCHours() - 9 + 24) % 24;
+  return alaskaHour >= 1 && alaskaHour < 7;
+}
+
 function chunkArray(array, size) {
   const chunks = [];
   for (let i = 0; i < array.length; i += size) {
@@ -127,6 +133,16 @@ export default async function handler(req, res) {
     const startTime = Date.now();
     const now = new Date();
     console.log(`[RACE] Notification cron started at ${now.toISOString()}`);
+
+    if (isAlaskaQuietHours()) {
+      console.log('[RACE] Quiet hours (1–7 AM AKST) — skipping race notifications');
+      return res.status(200).json({
+        success: true,
+        message: 'Skipped — quiet hours (1–7 AM AKST)',
+        notificationsSent: 0,
+        timestamp: now.toISOString()
+      });
+    }
     
     let totalNotificationsSent = 0;
     

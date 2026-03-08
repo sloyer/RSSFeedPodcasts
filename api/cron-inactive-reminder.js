@@ -6,6 +6,12 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// Returns true if the current time is between 1 AM and 7 AM Alaska Standard Time (UTC-9)
+function isAlaskaQuietHours() {
+  const alaskaHour = (new Date().getUTCHours() - 9 + 24) % 24;
+  return alaskaHour >= 1 && alaskaHour < 7;
+}
+
 export default async function handler(req, res) {
   // Verify cron secret to prevent unauthorized calls
   const authHeader = req.headers.authorization;
@@ -14,6 +20,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (isAlaskaQuietHours()) {
+      console.log('[REMINDER] Quiet hours (1–7 AM AKST) — skipping inactive reminders');
+      return res.status(200).json({
+        success: true,
+        message: 'Skipped — quiet hours (1–7 AM AKST)',
+        sent: 0
+      });
+    }
+
     const now = new Date().toISOString();
 
     // Only remind users who haven't opened the app in 24+ hours

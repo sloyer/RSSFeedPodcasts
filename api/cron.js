@@ -14,6 +14,12 @@ const supabase = createClient(
 // PUSH NOTIFICATION HELPERS
 // ============================================================================
 
+// Returns true if the current time is between 1 AM and 7 AM Alaska Standard Time (UTC-9)
+function isAlaskaQuietHours() {
+  const alaskaHour = (new Date().getUTCHours() - 9 + 24) % 24;
+  return alaskaHour >= 1 && alaskaHour < 7;
+}
+
 function chunkArray(array, size) {
   const chunks = [];
   for (let i = 0; i < array.length; i += size) {
@@ -607,7 +613,10 @@ export default async function handler(req, res) {
       }
       
       // Send notifications
-      if (recentContent.length > 0) {
+      if (isAlaskaQuietHours()) {
+        console.log('[PUSH] Quiet hours (1–7 AM AKST) — skipping push notifications');
+        results.notifications = 'skipped (quiet hours 1–7 AM AKST)';
+      } else if (recentContent.length > 0) {
         console.log(`[PUSH] Sending notifications for ${recentContent.length} items...`);
         
         // Sort by priority for Twitter: Podcasts > Videos > Articles
