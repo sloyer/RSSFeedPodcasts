@@ -39,6 +39,9 @@
     "api/cron-twitter.js": {
       "maxDuration": 180
     },
+    "api/tweet-replies.js": {
+      "maxDuration": 15
+    },
     "api/race-schedule.js": {
       "maxDuration": 10
     },
