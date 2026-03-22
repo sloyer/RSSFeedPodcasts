@@ -14,13 +14,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed. Use POST.' });
   }
 
-  const authHeader = req.headers.authorization;
-  const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
-
-  if (process.env.CRON_SECRET && authHeader !== expectedAuth) {
-    return res.status(401).json({ error: 'Unauthorized.' });
-  }
-
   const days = parseInt(req.query.days || '7', 10);
   if (isNaN(days) || days < 1 || days > 60) {
     return res.status(400).json({ error: 'days must be a number between 1 and 60.' });
