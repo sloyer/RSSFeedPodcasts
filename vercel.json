@@ -62,6 +62,9 @@
     },
     "api/game/leaderboard.js": {
       "maxDuration": 10
+    },
+    "api/backfill-articles.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
