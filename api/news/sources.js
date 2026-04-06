@@ -24,12 +24,14 @@ export default async function handler(req, res) {
     
     if (sourcesError) throw sourcesError;
     
-    // Get all articles for these sources in one query
+    // Get recent articles for these sources — limit to 500 to avoid fetching thousands of rows
+    // (enough to capture multiple recent articles per source for stats/thumbnails)
     const { data: articles, error: articlesError } = await supabase
       .from('articles')
       .select('company, published_date, image_url')
       .in('company', sources.map(s => s.company_name))
-      .order('published_date', { ascending: false });
+      .order('published_date', { ascending: false })
+      .limit(500);
     
     if (articlesError) throw articlesError;
     
@@ -74,8 +76,8 @@ export default async function handler(req, res) {
       }
     });
     
-    // Convert to array and filter out sources with 0 articles
-    const sourceData = Array.from(sourceMap.values()).filter(s => s.article_count > 0);
+    // Convert to array — show all active feeds in settings even if no recent articles in the window
+    const sourceData = Array.from(sourceMap.values());
     
     // Sort by latest article date (newest first), then by article count
     sourceData.sort((a, b) => {
