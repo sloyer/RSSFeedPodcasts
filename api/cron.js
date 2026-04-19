@@ -129,7 +129,7 @@ async function postToTwitter(item) {
     }
 
     // Build deep link using Universal Links (works on all platforms)
-    const deepLink = `https://motoaggregate.app/a/${item.id}`;
+    const deepLink = `https://www.motoaggregate.app/a/${item.id}`;
     
     // Emoji for content type
     const emoji = item.type === 'article' ? '📰' :
