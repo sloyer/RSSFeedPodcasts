@@ -51,7 +51,7 @@ async function uploadImageToTwitter(imageUrl, oauth) {
     const uploadOauth = {
       ...oauth,
       timestamp: Math.floor(Date.now() / 1000).toString(),
-      nonce: crypto.randomBytes(32).toString('base64')
+      nonce: crypto.randomBytes(32).toString('hex')
     };
 
     const method = 'POST';
@@ -129,7 +129,7 @@ async function postToTwitter(item) {
     }
 
     // Build deep link using Universal Links (works on all platforms)
-    const deepLink = `https://www.motoaggregate.app/a/${item.id}`;
+    const deepLink = `https://motoaggregate.app/a/${item.id}`;
     
     // Emoji for content type
     const emoji = item.type === 'article' ? '📰' :
@@ -158,7 +158,7 @@ ${deepLink}
       token_secret: process.env.TWITTER_ACCESS_SECRET,
       signature_method: 'HMAC-SHA1',
       timestamp: Math.floor(Date.now() / 1000).toString(),
-      nonce: crypto.randomBytes(32).toString('base64'),
+      nonce: crypto.randomBytes(32).toString('hex'),
       version: '1.0'
     };
 
@@ -400,11 +400,14 @@ async function sendPushNotifications(newContent) {
           ignoreDuplicates: true
         });
 
-      // NEW: Tweet ONLY THE FIRST (newest) item per cron run
-      if (!hasPostedToTwitter) {
+      // Tweet ONLY THE FIRST (newest) non-article item per cron run
+      // Articles link to external sites so deep links don't add value
+      if (!hasPostedToTwitter && item.type !== 'article') {
         await postToTwitter(item);
         hasPostedToTwitter = true;
         console.log('[TWITTER] Posted newest item, skipping rest to avoid spam');
+      } else if (item.type === 'article') {
+        console.log(`[TWITTER] Skipping article "${item.title.substring(0, 40)}..."`);
       } else {
         console.log(`[TWITTER] Skipping "${item.title.substring(0, 40)}..." (rate limited)`);
       }
