@@ -109,8 +109,10 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: 'server' });
     }
 
-    // Fire-and-forget email — never block the response on it.
-    notifyEmail({
+    // Await the email send before responding. On Vercel/Lambda the runtime
+    // can freeze the function the instant we return, killing any in-flight
+    // fetch — fire-and-forget silently loses messages here.
+    await notifyEmail({
       subject: `[Feedback] ${category}: ${trimmedMessage.slice(0, 60)}`,
       lines: [
         `Category: ${category}`,
@@ -120,7 +122,7 @@ export default async function handler(req, res) {
         '---',
         trimmedMessage,
       ],
-    }).catch(() => {});
+    }).catch((err) => console.error('[feedback] notifyEmail threw:', err));
 
     console.log(`[feedback] ✅ ${category} from ${platform || 'unknown'}`);
     return res.status(200).json({ ok: true });

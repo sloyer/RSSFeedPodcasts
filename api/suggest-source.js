@@ -151,7 +151,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: 'server' });
     }
 
-    notifyEmail({
+    // Await the email send — fire-and-forget gets killed when Vercel
+    // freezes the function after we return the response.
+    await notifyEmail({
       subject: `[Suggest] ${sourceType}: ${trimmedName.slice(0, 60)}`,
       lines: [
         `Type: ${sourceType}`,
@@ -162,7 +164,7 @@ export default async function handler(req, res) {
         `Install: ${installId || '—'}`,
         ...(trimmedNotes ? ['---', `Notes: ${trimmedNotes}`] : []),
       ],
-    }).catch(() => {});
+    }).catch((err) => console.error('[suggest-source] notifyEmail threw:', err));
 
     console.log(`[suggest-source] ✅ ${sourceType}: ${trimmedName}`);
     return res.status(200).json({ ok: true });
