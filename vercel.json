@@ -65,6 +65,12 @@
     },
     "api/backfill-articles.js": {
       "maxDuration": 300
+    },
+    "api/feedback.js": {
+      "maxDuration": 10
+    },
+    "api/suggest-source.js": {
+      "maxDuration": 10
     }
   },
   "crons": [
