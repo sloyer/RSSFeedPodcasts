@@ -34,49 +34,64 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { url, appleId, displayName } = req.body;
+    const { url, appleId, displayName, feedUrl: directFeedUrl } = req.body;
 
-    // Extract Apple Podcast ID from URL or use provided ID
-    let podcastId = appleId;
-    
-    if (url && !podcastId) {
-      // Extract ID from URLs like:
-      // https://podcasts.apple.com/us/podcast/some-podcast/id1234567890
-      // https://podcasts.apple.com/kw/podcast/inside-the-rig/id1862222625
-      const match = url.match(/\/id(\d+)/);
-      if (match) {
-        podcastId = match[1];
+    let feedUrl;
+    let podcastName = displayName;
+    let artworkUrl = '';
+
+    // If a direct RSS feed URL is provided, skip iTunes lookup
+    if (directFeedUrl) {
+      feedUrl = directFeedUrl;
+      console.log(`[ADD-PODCAST] Using direct RSS feed URL: ${feedUrl}`);
+    } else {
+      // Extract Apple Podcast ID from URL or use provided ID
+      let podcastId = appleId;
+      
+      if (url && !podcastId) {
+        // Extract ID from URLs like:
+        // https://podcasts.apple.com/us/podcast/some-podcast/id1234567890
+        // https://podcasts.apple.com/kw/podcast/inside-the-rig/id1862222625
+        const match = url.match(/\/id(\d+)/);
+        if (match) {
+          podcastId = match[1];
+        }
       }
+
+      if (!podcastId) {
+        return res.status(400).json({ 
+          error: 'Could not extract podcast ID. Provide Apple Podcasts URL, appleId, or feedUrl' 
+        });
+      }
+
+      console.log(`[ADD-PODCAST] Looking up Apple Podcast ID: ${podcastId}`);
+
+      // Try multiple country stores since new podcasts may not be in US catalog yet
+      let lookupData = { results: [] };
+      for (const country of ['us', 'nz', 'au', 'gb']) {
+        const lookupRes = await fetch(
+          `https://itunes.apple.com/lookup?id=${podcastId}&entity=podcast&country=${country}`
+        );
+        lookupData = await lookupRes.json();
+        if (lookupData.results && lookupData.results.length > 0) break;
+      }
+
+      if (!lookupData.results || lookupData.results.length === 0) {
+        return res.status(404).json({ error: 'Podcast not found on Apple Podcasts' });
+      }
+
+      const podcast = lookupData.results[0];
+      feedUrl = podcast.feedUrl;
+      podcastName = podcastName || podcast.collectionName;
+      artworkUrl = podcast.artworkUrl600 || podcast.artworkUrl100 || '';
+
+      if (!feedUrl) {
+        return res.status(400).json({ error: 'No RSS feed found for this podcast' });
+      }
+
+      console.log(`[ADD-PODCAST] Found: ${podcastName}`);
+      console.log(`[ADD-PODCAST] Feed URL: ${feedUrl}`);
     }
-
-    if (!podcastId) {
-      return res.status(400).json({ 
-        error: 'Could not extract podcast ID. Provide Apple Podcasts URL or appleId' 
-      });
-    }
-
-    console.log(`[ADD-PODCAST] Looking up Apple Podcast ID: ${podcastId}`);
-
-    // Lookup podcast via iTunes API
-    const lookupRes = await fetch(
-      `https://itunes.apple.com/lookup?id=${podcastId}&entity=podcast`
-    );
-    const lookupData = await lookupRes.json();
-
-    if (!lookupData.results || lookupData.results.length === 0) {
-      return res.status(404).json({ error: 'Podcast not found on Apple Podcasts' });
-    }
-
-    const podcast = lookupData.results[0];
-    const feedUrl = podcast.feedUrl;
-    const podcastName = displayName || podcast.collectionName;
-
-    if (!feedUrl) {
-      return res.status(400).json({ error: 'No RSS feed found for this podcast' });
-    }
-
-    console.log(`[ADD-PODCAST] Found: ${podcastName}`);
-    console.log(`[ADD-PODCAST] Feed URL: ${feedUrl}`);
 
     // Check if already exists
     const { data: existing } = await supabase
@@ -98,6 +113,10 @@ export default async function handler(req, res) {
     console.log(`[ADD-PODCAST] Fetching RSS feed...`);
     const feed = await parser.parseURL(feedUrl);
 
+    // Fallback name and artwork from RSS feed if not from iTunes
+    if (!podcastName) podcastName = feed.title || 'Unknown Podcast';
+    if (!artworkUrl) artworkUrl = feed['itunes:image']?.$?.href || feed.image?.url || '';
+
     // Add to rss_feeds table
     const { error: feedError } = await supabase
       .from('rss_feeds')
@@ -105,9 +124,9 @@ export default async function handler(req, res) {
         feed_url: feedUrl,
         feed_name: podcastName,
         display_name: podcastName,
-        description: podcast.collectionName ? `${podcast.artistName} - ${feed.description || ''}`.substring(0, 500) : '',
+        description: `${feed.author || feed.creator || ''} - ${feed.description || ''}`.substring(0, 500),
         category: 'podcast',
-        image_url: podcast.artworkUrl600 || podcast.artworkUrl100 || feed.itunes?.image || '',
+        image_url: artworkUrl || feed.itunes?.image || '',
         is_active: true
       });
 
@@ -122,7 +141,7 @@ export default async function handler(req, res) {
       podcast_title: item.title,
       podcast_date: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
       podcast_description: item.contentSnippet || item['itunes:summary'] || item.content || '',
-      podcast_image: item['itunes:image']?.href || podcast.artworkUrl600 || podcast.artworkUrl100 || '',
+      podcast_image: item['itunes:image']?.href || artworkUrl || '',
       audio_url: item.enclosure?.url || '',
       feed_url: feedUrl,
       guid: item.guid || item.link || `${feedUrl}-${item.title}`
@@ -147,7 +166,7 @@ export default async function handler(req, res) {
         name: podcastName,
         feedUrl: feedUrl,
         episodeCount: insertedEpisodes.length,
-        artwork: podcast.artworkUrl600 || podcast.artworkUrl100
+        artwork: artworkUrl
       }
     });
 
