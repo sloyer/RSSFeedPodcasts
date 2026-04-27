@@ -71,6 +71,21 @@
     },
     "api/suggest-source.js": {
       "maxDuration": 10
+    },
+    "api/race-results/events.js": {
+      "maxDuration": 10
+    },
+    "api/race-results/sessions.js": {
+      "maxDuration": 10
+    },
+    "api/race-results/race.js": {
+      "maxDuration": 15
+    },
+    "api/race-results/standings.js": {
+      "maxDuration": 10
+    },
+    "api/race-results/series-list.js": {
+      "maxDuration": 10
     }
   },
   "crons": [
