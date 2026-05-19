@@ -45,7 +45,10 @@ const CHANNEL_URLS = [
   'https://www.youtube.com/@TylerBereman653',
   'https://www.youtube.com/@raha/videos',
   'https://www.youtube.com/GrahamJarvis/videos',
-  'https://www.youtube.com/channel/UC2Jhqbj1NKCMdR0ky8mVvSw'
+  'https://www.youtube.com/channel/UC2Jhqbj1NKCMdR0ky8mVvSw',
+  'https://www.youtube.com/@KanaBoy777',
+  'https://www.youtube.com/@trystanhart84',
+  'https://www.youtube.com/@WALTYMX'
 ];
 
 async function addChannel(url) {

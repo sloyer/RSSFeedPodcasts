@@ -225,6 +225,7 @@ export default async function handler(req, res) {
       channel_id: channelDetails.channel_id,
       channel_title: channelDetails.channel_title,
       display_name: display_name || channelDetails.display_name,
+      description: channelDetails.description || null,
       uploads_playlist_id: channelDetails.uploads_playlist_id,
       is_active: is_active,
       last_video_id: null,
