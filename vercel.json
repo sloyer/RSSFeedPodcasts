@@ -101,6 +101,9 @@
     },
     "api/mxgp/standings.js": {
       "maxDuration": 10
+    },
+    "api/mxgp/stats.js": {
+      "maxDuration": 15
     }
   },
   "crons": [
