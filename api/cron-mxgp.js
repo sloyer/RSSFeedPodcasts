@@ -202,7 +202,7 @@ async function syncLive(year, stored, errors) {
 // Scrapes standings + completed event results.
 // ---------------------------------------------------------------------------
 
-async function syncHistorical(year, stored, errors) {
+async function syncHistorical(year, stored, errors, backfill = false) {
   console.log('[cron-mxgp] HISTORICAL mode — scraping racerxonline.com');
 
   // Events list
@@ -228,10 +228,11 @@ async function syncHistorical(year, stored, errors) {
     }
   }
 
-  // Per-event results — only last 14 days
+  // Per-event results — only last 14 days unless backfill=true
   const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
   const recent = events.filter(ev => {
     if (!Object.values(ev.sessions || {}).some(a => a.length > 0)) return false;
+    if (backfill) return true;
     return !ev.endDate || ev.endDate >= cutoff;
   });
 
@@ -276,8 +277,9 @@ export default async function handler(req, res) {
   const dayUTC  = new Date().getUTCDay(); // 0=Sun 1=Mon … 6=Sat
   const isWeekend = dayUTC === 0 || dayUTC === 6;
 
-  // Allow manual override: ?mode=live or ?mode=historical
-  const mode = req.query.mode || (isWeekend ? 'live' : 'historical');
+  // Allow manual override: ?mode=live|historical, ?backfill=true skips 14-day cutoff
+  const mode     = req.query.mode || (isWeekend ? 'live' : 'historical');
+  const backfill = req.query.backfill === 'true';
 
   const stored = [];
   const errors = [];
@@ -286,11 +288,11 @@ export default async function handler(req, res) {
     if (mode === 'live') {
       await syncLive(year, stored, errors);
     } else {
-      await syncHistorical(year, stored, errors);
+      await syncHistorical(year, stored, errors, backfill);
     }
 
     return res.status(200).json({
-      ok: true, mode, year,
+      ok: true, mode, year, backfill,
       stored: stored.length, errors: errors.length,
       errorList: errors, keys: stored,
     });
