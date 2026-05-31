@@ -86,6 +86,18 @@
     },
     "api/race-results/series-list.js": {
       "maxDuration": 10
+    },
+    "api/mxgp/events.js": {
+      "maxDuration": 15
+    },
+    "api/mxgp/sessions.js": {
+      "maxDuration": 15
+    },
+    "api/mxgp/race.js": {
+      "maxDuration": 20
+    },
+    "api/mxgp/standings.js": {
+      "maxDuration": 20
     }
   },
   "crons": [
