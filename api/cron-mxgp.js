@@ -11,6 +11,10 @@ import {
   CLASSES,
 } from '../lib/mxgpScraper.js';
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Pause between outbound requests to be a polite scraper
+const POLITE_DELAY_MS = 800;
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
@@ -58,6 +62,7 @@ export default async function handler(req, res) {
 
     // ── 2. Championship standings per class ───────────────────────────────────
     for (const cls of CLASSES) {
+      await sleep(POLITE_DELAY_MS);
       try {
         console.log(`[cron-mxgp] standings ${cls}…`);
         const data = await scrapeStandings(year, cls);
@@ -72,15 +77,24 @@ export default async function handler(req, res) {
     }
 
     // ── 3. Per-event results ──────────────────────────────────────────────────
-    // Only scrape events that have sessions (i.e., have run at least one moto)
-    const completedEvents = events.filter(ev =>
-      Object.values(ev.sessions || {}).some(arr => arr.length > 0),
-    );
+    // Only scrape events that:
+    //   a) have sessions (at least one moto has been run), AND
+    //   b) ended within the last 14 days — don't re-scrape old completed results
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const recentEvents = events.filter(ev => {
+      if (!Object.values(ev.sessions || {}).some(arr => arr.length > 0)) return false;
+      // Include if endDate is unknown (scrape it) or within the 14-day window
+      if (!ev.endDate) return true;
+      return ev.endDate >= cutoff;
+    });
 
-    for (const ev of completedEvents) {
+    console.log(`[cron-mxgp] ${recentEvents.length} recent events to sync (of ${events.length} total)`);
+
+    for (const ev of recentEvents) {
       // Class-level overall results (shows moto1/moto2 scores per rider)
       for (const cls of CLASSES) {
         if (!ev.sessions[cls]) continue; // class not present at this event
+        await sleep(POLITE_DELAY_MS);
         try {
           console.log(`[cron-mxgp] overall ${ev.slug}/${cls}…`);
           const data = await scrapeOverall(year, ev.slug, cls);
@@ -95,6 +109,7 @@ export default async function handler(req, res) {
 
         // Individual session results
         for (const session of (ev.sessions[cls] || [])) {
+          await sleep(POLITE_DELAY_MS);
           try {
             console.log(`[cron-mxgp] session ${ev.slug}/${cls}/${session}…`);
             const data = await scrapeSession(year, ev.slug, cls, session);

@@ -130,11 +130,15 @@
     },
     {
       "path": "/api/cron-mxgp",
-      "schedule": "*/15 * * * 0,6"
+      "schedule": "0,30 8-18 * * 6"
     },
     {
       "path": "/api/cron-mxgp",
-      "schedule": "0 */2 * * 1-5"
+      "schedule": "0,30 8-18 * * 0"
+    },
+    {
+      "path": "/api/cron-mxgp",
+      "schedule": "0 10 * * 1"
     }
   ],
   "headers": [
