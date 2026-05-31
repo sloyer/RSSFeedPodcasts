@@ -1,4 +1,8 @@
-// GET /api/mxgp/race?event_id=4108&race_id=351&class=mxgp&year=2026
+// GET /api/mxgp/race?year=2026&event=mxgp-of-france&class=mx1&session=grand-prix-race-1
+// Individual session results (pos, rider, time, gap, bike).
+// Session slugs: grand-prix-race-1, grand-prix-race-2, qualifying-race, race-1, race-2
+// Populated by api/cron-mxgp.js — reads from Supabase mxgp_cache.
+
 import { createClient } from '@supabase/supabase-js';
 import { applyCors, normalizeClass } from '../../lib/mxgpScraper.js';
 
@@ -8,14 +12,13 @@ export default async function handler(req, res) {
   applyCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { event_id, race_id } = req.query;
-  if (!event_id) return res.status(400).json({ error: 'event_id is required' });
-  if (!race_id)  return res.status(400).json({ error: 'race_id is required' });
+  const { event, session } = req.query;
+  if (!event)   return res.status(400).json({ error: 'event slug is required (e.g. mxgp-of-france)' });
+  if (!session) return res.status(400).json({ error: 'session slug is required (e.g. grand-prix-race-1)' });
 
-  const year       = String(req.query.year || new Date().getFullYear());
-  const cls        = normalizeClass(req.query.class);
-  const resultType = req.query.result_type || '1';
-  const key        = `mxgp:race:${event_id}:${race_id}:${cls}:${year}:rt${resultType}`;
+  const year = String(req.query.year || new Date().getFullYear());
+  const cls  = normalizeClass(req.query.class);
+  const key  = `rx:session:${year}:${event}:${cls}:${session}`;
 
   const { data, error } = await supabase
     .from('mxgp_cache')

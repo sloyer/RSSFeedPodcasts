@@ -1,6 +1,9 @@
-// GET /api/mxgp/events?year=2026&class=mxgp
+// GET /api/mxgp/events?year=2026
+// Returns all events for the season with their session links.
+// Populated by api/cron-mxgp.js — reads from Supabase mxgp_cache.
+
 import { createClient } from '@supabase/supabase-js';
-import { applyCors, normalizeClass } from '../../lib/mxgpScraper.js';
+import { applyCors } from '../../lib/mxgpScraper.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
@@ -9,8 +12,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const year = String(req.query.year || new Date().getFullYear());
-  const cls  = normalizeClass(req.query.class);
-  const key  = `mxgp:events:${year}:${cls}`;
+  const key  = `rx:events:${year}`;
 
   const { data, error } = await supabase
     .from('mxgp_cache')

@@ -1,4 +1,7 @@
-// GET /api/mxgp/standings?year=2026&class=mxgp
+// GET /api/mxgp/standings?year=2026&class=mx1
+// Championship standings for a class (mx1, mx2, emx250, wmx).
+// Populated by api/cron-mxgp.js — reads from Supabase mxgp_cache.
+
 import { createClient } from '@supabase/supabase-js';
 import { applyCors, normalizeClass } from '../../lib/mxgpScraper.js';
 
@@ -10,7 +13,7 @@ export default async function handler(req, res) {
 
   const year = String(req.query.year || new Date().getFullYear());
   const cls  = normalizeClass(req.query.class);
-  const key  = `mxgp:standings:${year}:${cls}:latest`;
+  const key  = `rx:standings:${year}:${cls}`;
 
   const { data, error } = await supabase
     .from('mxgp_cache')
