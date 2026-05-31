@@ -115,6 +115,8 @@ async function fetchStandings(formState, current, year, cship, classId, eventId)
   let fs = formState;
   const targetClass = classId || current.SelectClass;
 
+  // POST 1 (optional): switch class if needed — also gives us a valid SelectRace
+  let selectRace = current.SelectRace;
   if (targetClass !== current.SelectClass) {
     const html1 = await postReslists(fs, {
       __EVENTTARGET: 'SelectClass',
@@ -126,15 +128,29 @@ async function fetchStandings(formState, current, year, cship, classId, eventId)
       SelectResult: '1',
     });
     fs = extractFormState(html1);
+    // Capture the first valid race from this event so step 2 has a non-empty value
+    const raceOpts = extractSelectOptions(html1, 'SelectRace');
+    selectRace = raceOpts[0]?.value || current.SelectRace;
+  } else if (!selectRace) {
+    // No class switch needed but SelectRace is empty — fetch event sessions to get one
+    const evHtml = await postReslists(fs, {
+      __EVENTTARGET: 'SelectEvent',
+      SelectYear: year, SelectCShip: cship, SelectClass: targetClass,
+      SelectEvent: eventId, SelectRace: '', SelectResult: '1',
+    });
+    fs = extractFormState(evHtml);
+    const raceOpts = extractSelectOptions(evHtml, 'SelectRace');
+    selectRace = raceOpts[0]?.value || '';
   }
 
+  // POST 2: SelectResult=5 — SelectRace MUST be non-empty or server ignores the change
   const html2 = await postReslists(fs, {
     __EVENTTARGET: 'SelectResult',
     SelectYear:   year,
     SelectCShip:  cship,
     SelectClass:  targetClass,
     SelectEvent:  eventId,
-    SelectRace:   current.SelectRace,
+    SelectRace:   selectRace,
     SelectResult: RESULT_TYPE.standings,
   });
   return parseStandings(html2);
@@ -177,14 +193,17 @@ async function syncClass(year, cls, config, eventsToSync = 2) {
   await dbSet(`mxgp:events:${year}:${cls}`, eventsPayload, 2 * 3600);
   console.log(`[cron-mxgp] ${label} events saved (${events.length} rounds)`);
 
-  // 2. Standings
+  // 2. Standings — use the second event (index 1) since the latest (index 0)
+  // may be in-progress today, causing the server to 500 on standings queries.
+  // Fall back to the first event if only one exists.
+  const standingsEventId = (events[1] || events[0])?.value || current.SelectEvent;
   try {
-    const standingsData = await fetchStandings(evFormState, current, year, cship, classId, current.SelectEvent);
+    const standingsData = await fetchStandings(evFormState, current, year, cship, classId, standingsEventId);
     const standingsPayload = {
       class: cls,
       year,
-      event_id:   current.SelectEvent,
-      event_name: events.find((e) => e.value === current.SelectEvent)?.label || null,
+      event_id:   standingsEventId,
+      event_name: events.find((e) => e.value === standingsEventId)?.label || null,
       ...standingsData,
       timestamp: new Date().toISOString(),
     };
