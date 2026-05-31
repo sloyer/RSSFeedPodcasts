@@ -105,18 +105,39 @@ async function fetchRaceResult(formState, current, year, cship, classId, eventId
   return parseClassification(html);
 }
 
-// Fetch standings
+// Fetch standings.
+// ASP.NET only processes ONE control's change per postback (via __EVENTTARGET).
+// To switch both class and result type we need two sequential POSTs.
+// POST 1: switch SelectClass → new VIEWSTATE with correct class active.
+// POST 2: switch SelectResult=5 → standings HTML.
+// If the class already matches the current VIEWSTATE we skip POST 1.
 async function fetchStandings(formState, current, year, cship, classId, eventId) {
-  const html = await postReslists(formState, {
-    __EVENTTARGET: 'SelectClass',
+  let fs = formState;
+  const targetClass = classId || current.SelectClass;
+
+  if (targetClass !== current.SelectClass) {
+    const html1 = await postReslists(fs, {
+      __EVENTTARGET: 'SelectClass',
+      SelectYear:   year,
+      SelectCShip:  cship,
+      SelectClass:  targetClass,
+      SelectEvent:  eventId,
+      SelectRace:   current.SelectRace,
+      SelectResult: '1',
+    });
+    fs = extractFormState(html1);
+  }
+
+  const html2 = await postReslists(fs, {
+    __EVENTTARGET: 'SelectResult',
     SelectYear:   year,
     SelectCShip:  cship,
-    SelectClass:  classId || current.SelectClass,
+    SelectClass:  targetClass,
     SelectEvent:  eventId,
     SelectRace:   current.SelectRace,
     SelectResult: RESULT_TYPE.standings,
   });
-  return parseStandings(html);
+  return parseStandings(html2);
 }
 
 // Classify session type from name
