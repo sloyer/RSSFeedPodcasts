@@ -87,17 +87,20 @@
     "api/race-results/series-list.js": {
       "maxDuration": 10
     },
+    "api/cron-mxgp.js": {
+      "maxDuration": 120
+    },
     "api/mxgp/events.js": {
-      "maxDuration": 15
+      "maxDuration": 10
     },
     "api/mxgp/sessions.js": {
-      "maxDuration": 15
+      "maxDuration": 10
     },
     "api/mxgp/race.js": {
-      "maxDuration": 20
+      "maxDuration": 10
     },
     "api/mxgp/standings.js": {
-      "maxDuration": 20
+      "maxDuration": 10
     }
   },
   "crons": [
@@ -124,6 +127,14 @@
     {
       "path": "/api/cron-race-schedule-notifications",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron-mxgp",
+      "schedule": "*/15 * * * 0,6"
+    },
+    {
+      "path": "/api/cron-mxgp",
+      "schedule": "0 */2 * * 1-5"
     }
   ],
   "headers": [
