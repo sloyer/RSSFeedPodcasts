@@ -101,10 +101,32 @@ export default async function handler(req, res) {
       .single();
 
     if (existing) {
+      // Sync any new episodes instead of just returning early
+      console.log(`[ADD-PODCAST] Feed exists, syncing new episodes for: ${existing.feed_name}`);
+      const feed = await parser.parseURL(feedUrl);
+      const episodes = feed.items.slice(0, 50).map(item => ({
+        podcast_name: existing.feed_name,
+        podcast_title: item.title,
+        podcast_date: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+        podcast_description: item.contentSnippet || item['itunes:summary'] || item.content || '',
+        podcast_image: item['itunes:image']?.href || '',
+        audio_url: item.enclosure?.url || '',
+        feed_url: feedUrl,
+        guid: item.guid || item.link || `${feedUrl}-${item.title}`
+      }));
+
+      const { data: upserted, error: upsertError } = await supabase
+        .from('podcasts')
+        .upsert(episodes, { onConflict: 'guid' })
+        .select();
+
+      if (upsertError) throw new Error(`Episode sync failed: ${upsertError.message}`);
+
       return res.status(200).json({
         success: true,
-        message: `Podcast "${existing.feed_name}" already exists`,
+        message: `Synced "${existing.feed_name}" — ${upserted.length} episodes up to date`,
         alreadyExists: true,
+        episodeCount: upserted.length,
         feedUrl: feedUrl
       });
     }
