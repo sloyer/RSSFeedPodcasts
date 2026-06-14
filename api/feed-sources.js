@@ -20,23 +20,32 @@ export default async function handler(req, res) {
       if (!type || type === 'news') {
         const { data: newsFeeds, error: newsError } = await supabase
           .from('motocross_feeds')
-          .select('id, feed_name, company_name')
+          .select('id, feed_name, company_name, feed_url, logo_url')
           .eq('is_active', true)
           .not('company_name', 'is', null)
           .order('company_name', { ascending: true });
         
         if (newsError) throw newsError;
         
-        feedSources.news = newsFeeds.map(feed => ({
-          id: feed.id.toString(),
-          name: feed.company_name, // Use company_name which matches articles table
-          apiCode: feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''),
-          logo: `https://via.placeholder.com/100x100/FF5722/FFFFFF?text=${encodeURIComponent(feed.company_name.charAt(0))}`,
-          category: 'Motocross News',
-          enabled: false, // Default - user will set this
-          type: 'news',
-          priority: 1
-        }));
+        feedSources.news = newsFeeds.map(feed => {
+          const domain = (() => {
+            try { return new URL(feed.feed_url).hostname.replace(/^(www\.|feeds\.|rss\.|news\.)/, ''); }
+            catch { return null; }
+          })();
+          const logo = feed.logo_url
+            || (domain ? `https://logo.clearbit.com/${domain}` : null)
+            || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+          return {
+            id: feed.id.toString(),
+            name: feed.company_name,
+            apiCode: feed.company_name.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+            logo,
+            category: 'Motocross News',
+            enabled: false,
+            type: 'news',
+            priority: 1
+          };
+        });
       }
       
       // Fetch podcast feeds - get RSS feeds from rss_feeds table
@@ -56,9 +65,9 @@ export default async function handler(req, res) {
             name: feed.feed_name,
             apiCode: apiCode,
             url: `https://rss-feed-podcasts.vercel.app/api/podcasts?group_by_show=${apiCode}`,
-            logo: `https://via.placeholder.com/100x100/9C27B0/FFFFFF?text=${encodeURIComponent(feed.feed_name.charAt(0))}`,
+            logo: feed.image_url || null,
             category: 'Podcasts',
-            enabled: false, // Default - user will set this
+            enabled: false,
             type: 'podcasts',
             priority: 1
           };
@@ -81,9 +90,9 @@ export default async function handler(req, res) {
             id: feed.id.toString(),
             name: feed.display_name || feed.channel_title,
             apiCode: apiCode,
-            logo: `https://via.placeholder.com/100x100/F44336/FFFFFF?text=${encodeURIComponent((feed.display_name || feed.channel_title).charAt(0))}`,
+            logo: feed.thumbnail_url || null,
             category: 'YouTube',
-            enabled: false, // Default - user will set this
+            enabled: false,
             type: 'youtube',
             priority: 1
           };

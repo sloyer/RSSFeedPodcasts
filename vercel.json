@@ -72,6 +72,9 @@
     "api/backfill-podcast-images.js": {
       "maxDuration": 300
     },
+    "api/backfill-news-logos.js": {
+      "maxDuration": 120
+    },
     "api/feedback.js": {
       "maxDuration": 10
     },
