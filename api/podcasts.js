@@ -105,17 +105,38 @@ export default async function handler(req, res) {
         const { data: podcasts, error } = await query;
         if (error) throw error;
 
+        // Build show image map from rss_feeds for unique feed_urls in this result set
+        const uniqueFeedUrls = [...new Set(podcasts.map(p => p.feed_url).filter(Boolean))];
+        let showImageMap = {};
+
+        if (uniqueFeedUrls.length > 0) {
+          const { data: feedData } = await supabase
+            .from('rss_feeds')
+            .select('feed_url, image_url, feed_name, display_name')
+            .in('feed_url', uniqueFeedUrls);
+
+          if (feedData) {
+            feedData.forEach(f => {
+              showImageMap[f.feed_url] = {
+                imageUrl: f.image_url || null,
+                showName: f.display_name || f.feed_name || null
+              };
+            });
+          }
+        }
+
         // Group by show if requested
         if (group_by_show === 'true') {
           const groupedData = {};
           
           podcasts.forEach(episode => {
             const showName = episode.podcast_name;
+            const feedMeta = showImageMap[episode.feed_url] || {};
             
             if (!groupedData[showName]) {
               groupedData[showName] = {
                 show_name: showName,
-                show_image: episode.podcast_image,
+                show_image: feedMeta.imageUrl || episode.podcast_image || null,
                 feed_url: episode.feed_url,
                 episodes: []
               };
@@ -127,6 +148,7 @@ export default async function handler(req, res) {
               description: episode.podcast_description,
               published_date: episode.podcast_date,
               image_url: episode.podcast_image,
+              show_image: feedMeta.imageUrl || episode.podcast_image || null,
               audio_url: episode.audio_url,
               guid: episode.guid
             });
@@ -154,14 +176,19 @@ export default async function handler(req, res) {
           });
         }
 
-        // Default response - flat list
+        // Default response - flat list with show_image stitched in
+        const enrichedPodcasts = podcasts.map(episode => ({
+          ...episode,
+          show_image: showImageMap[episode.feed_url]?.imageUrl || episode.podcast_image || null
+        }));
+
         return res.status(200).json({ 
           success: true, 
-          data: podcasts,
+          data: enrichedPodcasts,
           pagination: {
             limit: parseInt(limit),
             offset: parseInt(offset),
-            count: podcasts.length
+            count: enrichedPodcasts.length
           },
           grouped_by_show: false
         });
