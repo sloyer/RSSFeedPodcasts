@@ -66,6 +66,9 @@
     "api/backfill-articles.js": {
       "maxDuration": 300
     },
+    "api/backfill-channel-thumbnails.js": {
+      "maxDuration": 120
+    },
     "api/feedback.js": {
       "maxDuration": 10
     },
