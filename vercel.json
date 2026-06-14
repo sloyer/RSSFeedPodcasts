@@ -75,6 +75,15 @@
     "api/backfill-news-logos.js": {
       "maxDuration": 120
     },
+    "api/canadian-mx/events.js": {
+      "maxDuration": 15
+    },
+    "api/canadian-mx/results.js": {
+      "maxDuration": 15
+    },
+    "api/canadian-mx/standings.js": {
+      "maxDuration": 15
+    },
     "api/feedback.js": {
       "maxDuration": 10
     },
