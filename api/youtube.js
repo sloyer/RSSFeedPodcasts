@@ -106,11 +106,33 @@ export default async function handler(req, res) {
       
       if (error) throw error;
 
+      // Build a channel thumbnail map from unique channel_ids in this result set
+      const uniqueChannelIds = [...new Set(videos.map(v => v.channel_id).filter(Boolean))];
+      let channelThumbnailMap = {};
+
+      if (uniqueChannelIds.length > 0) {
+        const { data: channelData } = await supabase
+          .from('youtube_channels')
+          .select('channel_id, thumbnail_url, handle')
+          .in('channel_id', uniqueChannelIds);
+
+        if (channelData) {
+          channelData.forEach(ch => {
+            channelThumbnailMap[ch.channel_id] = {
+              thumbnailUrl: ch.thumbnail_url || null,
+              handle: ch.handle || null
+            };
+          });
+        }
+      }
+
       // Transform data for mobile app
       const transformedVideos = videos.map(video => ({
         id: video.video_id,
         channelId: video.channel_id,
         channelName: video.channel_title,
+        channelThumbnailUrl: channelThumbnailMap[video.channel_id]?.thumbnailUrl || null,
+        channelHandle: channelThumbnailMap[video.channel_id]?.handle || null,
         title: video.title,
         description: video.description,
         publishedAt: video.published_at,
