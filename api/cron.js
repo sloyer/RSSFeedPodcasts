@@ -246,13 +246,91 @@ ${deepLink}
   }
 }
 
+// ============================================================================
+// FACEBOOK PAGE POSTING
+// ============================================================================
+
+async function postToFacebook(item) {
+  try {
+    if (!process.env.FACEBOOK_PAGE_ID || !process.env.FACEBOOK_PAGE_ACCESS_TOKEN) {
+      console.log('[FACEBOOK] Skipping - credentials not configured');
+      return;
+    }
+
+    // Dedup: skip if we already posted this item
+    const { data: alreadyPosted } = await supabase
+      .from('sent_fb_posts')
+      .select('id')
+      .eq('content_id', item.id)
+      .eq('feed_name', item.feedName)
+      .single();
+
+    if (alreadyPosted) {
+      console.log(`[FACEBOOK] Already posted: ${item.title.substring(0, 40)}...`);
+      return;
+    }
+
+    // Emoji label by content type
+    const emoji = item.type === 'article' ? '📰' :
+                  item.type === 'video'   ? '🎥' : '🎙️';
+
+    // Message text: credit first, then hashtags
+    // The title + thumbnail come from Facebook's automatic link preview unfurl
+    const message = `${emoji} ${item.feedName}\n\n${item.title}\n\n#Motocross #Supercross`;
+
+    // The actual content URL (YouTube watch page, article URL, or podcast page)
+    // Facebook will scrape this for og:title, og:image → gives the rich preview card
+    const link = item.url || `https://www.motoaggregate.app/a/${item.id}`;
+
+    console.log(`[FACEBOOK] Posting for: ${item.title.substring(0, 50)}...`);
+
+    const body = {
+      message,
+      link,
+      access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN
+    };
+
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${process.env.FACEBOOK_PAGE_ID}/feed`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      console.log(`[FACEBOOK] ✅ Posted: https://www.facebook.com/${data.id}`);
+
+      // Track so we never post the same item twice
+      await supabase.from('sent_fb_posts').insert({
+        content_id: item.id,
+        content_type: item.type,
+        feed_name: item.feedName,
+        title: item.title,
+        fb_post_id: data.id,
+        posted_at: new Date().toISOString()
+      });
+    } else {
+      const err = await res.text();
+      console.error(`[FACEBOOK] ❌ Failed (${res.status}): ${err.substring(0, 200)}`);
+    }
+
+  } catch (error) {
+    console.error('[FACEBOOK] Error:', error);
+    // Don't throw - continue even if Facebook fails
+  }
+}
+
 async function sendPushNotifications(newContent) {
   if (!newContent || newContent.length === 0) return;
   
   console.log(`[PUSH] Processing ${newContent.length} items`);
 
-  // Track if we've tweeted in this run (only tweet once per cron run = ~every 15 min)
+  // Track if we've tweeted/posted in this run (only post once per cron run = ~every 15 min)
   let hasPostedToTwitter = false;
+  let hasPostedToFacebook = false;
 
   for (const item of newContent) {
     try {
@@ -410,6 +488,16 @@ async function sendPushNotifications(newContent) {
         console.log(`[TWITTER] Skipping article "${item.title.substring(0, 40)}..."`);
       } else {
         console.log(`[TWITTER] Skipping "${item.title.substring(0, 40)}..." (rate limited)`);
+      }
+
+      // Facebook: post the FIRST (newest) item per cron run — all content types allowed
+      // Uses item.url so FB unfurls the real thumbnail + title from the source page
+      if (!hasPostedToFacebook) {
+        await postToFacebook(item);
+        hasPostedToFacebook = true;
+        console.log('[FACEBOOK] Posted newest item, skipping rest to avoid spam');
+      } else {
+        console.log(`[FACEBOOK] Skipping "${item.title.substring(0, 40)}..." (already posted this run)`);
       }
 
     } catch (error) {
