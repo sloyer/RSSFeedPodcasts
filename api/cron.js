@@ -74,8 +74,10 @@ async function postToFacebook(item) {
     parts.push(credit);
     const message = parts.join('\n\n');
 
-    // URL — Facebook will auto-scrape og:image for the thumbnail preview card
-    const link = item.url || `https://www.motoaggregate.app/a/${item.id}`;
+    // Podcasts link to the app; videos/articles link to their source
+    const link = item.type === 'podcast'
+      ? `https://www.motoaggregate.app/a/${item.id}`
+      : (item.url || `https://www.motoaggregate.app/a/${item.id}`);
 
     console.log(`[FACEBOOK] Posting for: ${item.title.substring(0, 50)}...`);
 
