@@ -19,13 +19,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Test 1: message only (no link) — checks if basic posting works
     const fbRes = await fetch(
       `https://graph.facebook.com/v21.0/${pageId}/feed`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: '[TEST] MotoAggregate Facebook integration test — ignore this post.',
+          message: '[TEST] MotoAggregate Facebook integration test — ignore this post. https://www.motoaggregate.app',
           access_token: token
         })
       }

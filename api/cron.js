@@ -73,9 +73,10 @@ async function postToFacebook(item) {
 
     console.log(`[FACEBOOK] Posting for: ${item.title.substring(0, 50)}...`);
 
+    // Include link in message text — avoids pages_read_engagement requirement
+    // that the separate `link` field triggers
     const body = {
-      message,
-      link,
+      message: `${message}\n\n${link}`,
       access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN
     };
 
