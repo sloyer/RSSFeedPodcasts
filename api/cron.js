@@ -59,24 +59,29 @@ async function postToFacebook(item) {
       return;
     }
 
-    // Emoji label by content type
-    const emoji = item.type === 'article' ? '📰' :
-                  item.type === 'video'   ? '🎥' : '🎙️';
+    // Description snippet (keep it short)
+    const rawDesc = item.description || '';
+    const desc = rawDesc.length > 200
+      ? rawDesc.substring(0, 197).trimEnd() + '...'
+      : rawDesc.trim();
 
-    // Message text: credit first, then hashtags
-    // The title + thumbnail come from Facebook's automatic link preview unfurl
-    const message = `${emoji} ${item.feedName}\n\n${item.title}\n\n#Motocross #Supercross`;
+    // Credit line
+    const credit = `Via: ${item.feedName}`;
 
-    // The actual content URL (YouTube watch page, article URL, or podcast page)
-    // Facebook will scrape this for og:title, og:image → gives the rich preview card
+    // Build message: title, optional description, credit
+    const parts = [item.title];
+    if (desc) parts.push(desc);
+    parts.push(credit);
+    const message = parts.join('\n\n');
+
+    // URL — Facebook will auto-scrape og:image for the thumbnail preview card
     const link = item.url || `https://www.motoaggregate.app/a/${item.id}`;
 
     console.log(`[FACEBOOK] Posting for: ${item.title.substring(0, 50)}...`);
 
-    // Include link in message text — avoids pages_read_engagement requirement
-    // that the separate `link` field triggers
     const body = {
-      message: `${message}\n\n${link}`,
+      message,
+      link,
       access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN
     };
 
@@ -420,7 +425,8 @@ export default async function handler(req, res) {
               feedName,
               type: 'podcast',
               url: e.feed_url || e.link,
-              image: e.podcast_image || e.image_url
+              image: e.podcast_image || e.image_url,
+              description: e.podcast_description || ''
             });
           });
         }
@@ -446,7 +452,9 @@ export default async function handler(req, res) {
               feedName: a.company,
               type: 'article',
               url: a.article_url,
-              image: a.image_url
+              image: a.image_url,
+              description: a.excerpt || '',
+              author: a.author || ''
             });
           });
         }
@@ -472,7 +480,8 @@ export default async function handler(req, res) {
               feedName: v.channelName,
               type: 'video',
               url: v.watchUrl,
-              image: v.thumbnailUrl
+              image: v.thumbnailUrl,
+              description: v.description || ''
             });
           });
         }
