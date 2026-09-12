@@ -130,10 +130,7 @@ async function sendPushNotifications(newContent) {
   
   console.log(`[PUSH] Processing ${newContent.length} items`);
 
-  // ── Post ALL new content to Facebook, independently of push subscribers ──
-  for (const item of newContent) {
-    await postToFacebook(item);
-  }
+  // Facebook posting is handled by the dedicated /api/cron-facebook (runs every 5 min)
 
   for (const item of newContent) {
     try {
