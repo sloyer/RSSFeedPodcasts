@@ -130,15 +130,9 @@ async function sendPushNotifications(newContent) {
   
   console.log(`[PUSH] Processing ${newContent.length} items`);
 
-  let hasPostedToFacebook = false;
-
-  // ── Facebook runs FIRST, independently of push subscribers ──
+  // ── Post ALL new content to Facebook, independently of push subscribers ──
   for (const item of newContent) {
-    if (!hasPostedToFacebook) {
-      await postToFacebook(item);
-      hasPostedToFacebook = true;
-      break;
-    }
+    await postToFacebook(item);
   }
 
   for (const item of newContent) {
