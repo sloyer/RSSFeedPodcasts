@@ -124,7 +124,10 @@
       "maxDuration": 15
     },
     "api/cron-facebook.js": {
-      "maxDuration": 30
+      "maxDuration": 60
+    },
+    "api/story-card.js": {
+      "maxDuration": 20
     }
   },
   "crons": [

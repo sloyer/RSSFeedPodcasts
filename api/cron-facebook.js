@@ -42,7 +42,7 @@ async function storiesTodayCount() {
 }
 
 async function postStoryToFacebook(item) {
-  if (!PAGE_ID || !TOKEN || !item.image) return;
+  if (!PAGE_ID || !TOKEN) return;
 
   const storyContentId = `story_${item.id}`;
   if (await alreadyPosted(storyContentId, item.feedName)) {
@@ -51,18 +51,32 @@ async function postStoryToFacebook(item) {
   }
 
   try {
-    // Step 1: Upload the image to Facebook (unpublished)
+    // ── Step 1: Generate a proper 9:16 story card PNG via our story-card endpoint ──
+    // This burns the thumbnail, title, and credit into a portrait-format image.
+    const params = new URLSearchParams({
+      title:  item.title.substring(0, 100),
+      image:  item.image || '',
+      credit: `Via: ${item.feedName}`
+    });
+    const cardUrl = `${API_BASE}/api/story-card?${params.toString()}`;
+    console.log(`[FB STORY] Generating card: ${cardUrl.substring(0, 120)}`);
+
+    const cardRes = await fetch(cardUrl, { signal: AbortSignal.timeout(15000) });
+    if (!cardRes.ok) {
+      console.error(`[FB STORY] ❌ Card generation failed: HTTP ${cardRes.status}`);
+      return;
+    }
+    const cardBuffer = Buffer.from(await cardRes.arrayBuffer());
+
+    // ── Step 2: Upload the PNG bytes to Facebook (multipart, unpublished) ──
+    const form = new FormData();
+    form.append('source', new Blob([cardBuffer], { type: 'image/png' }), 'story.png');
+    form.append('published', 'false');
+    form.append('access_token', TOKEN);
+
     const uploadRes = await fetch(
       `https://graph.facebook.com/v21.0/${PAGE_ID}/photos`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: item.image,
-          published: false,
-          access_token: TOKEN
-        })
-      }
+      { method: 'POST', body: form }
     );
     const uploadData = await uploadRes.json();
     if (!uploadData.id) {
@@ -70,7 +84,7 @@ async function postStoryToFacebook(item) {
       return;
     }
 
-    // Step 2: Create the story using the uploaded photo ID
+    // ── Step 3: Create the story using the uploaded photo ID ──
     const storyRes = await fetch(
       `https://graph.facebook.com/v21.0/${PAGE_ID}/photo_stories`,
       {
