@@ -34,217 +34,6 @@ function isRecent(dateString) {
   return contentDate > thirtyMinutesAgo;
 }
 
-async function uploadImageToTwitter(imageUrl, oauth) {
-  try {
-    // Fetch the image
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      console.log('[TWITTER] Failed to fetch image:', imageUrl);
-      return null;
-    }
-
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const base64Image = Buffer.from(imageBuffer).toString('base64');
-
-    // Upload to Twitter media endpoint (v1.1)
-    const crypto = await import('crypto');
-    const uploadOauth = {
-      ...oauth,
-      timestamp: Math.floor(Date.now() / 1000).toString(),
-      nonce: crypto.randomBytes(32).toString('hex')
-    };
-
-    const method = 'POST';
-    const url = 'https://upload.twitter.com/1.1/media/upload.json';
-    const params = {
-      oauth_consumer_key: uploadOauth.consumer_key,
-      oauth_token: uploadOauth.token,
-      oauth_signature_method: uploadOauth.signature_method,
-      oauth_timestamp: uploadOauth.timestamp,
-      oauth_nonce: uploadOauth.nonce,
-      oauth_version: uploadOauth.version
-    };
-
-    const paramString = Object.keys(params)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-      .join('&');
-
-    const signatureBase = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
-    const signingKey = `${encodeURIComponent(uploadOauth.consumer_secret)}&${encodeURIComponent(uploadOauth.token_secret)}`;
-    const signature = crypto.createHmac('sha1', signingKey).update(signatureBase).digest('base64');
-
-    params.oauth_signature = signature;
-
-    const authHeader = 'OAuth ' + Object.keys(params)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(params[key])}"`)
-      .join(', ');
-
-    // Upload image
-    const uploadResponse = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `media_data=${encodeURIComponent(base64Image)}`
-    });
-
-    if (uploadResponse.ok) {
-      const data = await uploadResponse.json();
-      console.log('[TWITTER] Image uploaded successfully, media_id:', data.media_id_string);
-      return data.media_id_string;
-    } else {
-      const error = await uploadResponse.text();
-      console.error('[TWITTER] Image upload failed:', error);
-      return null;
-    }
-  } catch (error) {
-    console.error('[TWITTER] Error uploading image:', error);
-    return null;
-  }
-}
-
-async function postToTwitter(item) {
-  try {
-    // Skip if no Twitter credentials configured
-    if (!process.env.TWITTER_API_KEY || !process.env.TWITTER_API_SECRET || 
-        !process.env.TWITTER_ACCESS_TOKEN || !process.env.TWITTER_ACCESS_SECRET) {
-      console.log('[TWITTER] Skipping - credentials not configured');
-      return;
-    }
-
-    // Check if we already tweeted this (independent of push notifications)
-    const { data: alreadyTweeted } = await supabase
-      .from('sent_tweets')
-      .select('id')
-      .eq('content_id', item.id)
-      .eq('feed_name', item.feedName)
-      .single();
-
-    if (alreadyTweeted) {
-      console.log(`[TWITTER] Already tweeted: ${item.title.substring(0, 40)}...`);
-      return;
-    }
-
-    // Build deep link using Universal Links (works on all platforms)
-    const deepLink = `https://www.motoaggregate.app/a/${item.id}`;
-    
-    // Emoji for content type
-    const emoji = item.type === 'article' ? '📰' :
-                  item.type === 'video' ? '🎥' : '🎙️';
-    
-    // Build tweet (280 char limit)
-    const tweetText = `${emoji} ${item.feedName}: ${item.title}
-
-${deepLink}
-
-#Motocross #Supercross`;
-
-    // Truncate if too long
-    const finalTweet = tweetText.length > 280 
-      ? tweetText.substring(0, 277) + '...' 
-      : tweetText;
-
-    console.log(`[TWITTER] Posting tweet for: ${item.title.substring(0, 40)}...`);
-
-    // Generate OAuth 1.0a signature
-    const crypto = await import('crypto');
-    const oauth = {
-      consumer_key: process.env.TWITTER_API_KEY,
-      consumer_secret: process.env.TWITTER_API_SECRET,
-      token: process.env.TWITTER_ACCESS_TOKEN,
-      token_secret: process.env.TWITTER_ACCESS_SECRET,
-      signature_method: 'HMAC-SHA1',
-      timestamp: Math.floor(Date.now() / 1000).toString(),
-      nonce: crypto.randomBytes(32).toString('hex'),
-      version: '1.0'
-    };
-
-    // Upload image if available
-    let mediaId = null;
-    if (item.image) {
-      console.log('[TWITTER] Uploading image:', item.image);
-      mediaId = await uploadImageToTwitter(item.image, oauth);
-    } else {
-      console.log('[TWITTER] No image available for this item');
-    }
-
-    // Build OAuth signature
-    const method = 'POST';
-    const url = 'https://api.twitter.com/2/tweets';
-    const params = {
-      oauth_consumer_key: oauth.consumer_key,
-      oauth_token: oauth.token,
-      oauth_signature_method: oauth.signature_method,
-      oauth_timestamp: oauth.timestamp,
-      oauth_nonce: oauth.nonce,
-      oauth_version: oauth.version
-    };
-
-    const paramString = Object.keys(params)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-      .join('&');
-
-    const signatureBase = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
-    const signingKey = `${encodeURIComponent(oauth.consumer_secret)}&${encodeURIComponent(oauth.token_secret)}`;
-    const signature = crypto.createHmac('sha1', signingKey).update(signatureBase).digest('base64');
-
-    params.oauth_signature = signature;
-
-    const authHeader = 'OAuth ' + Object.keys(params)
-      .sort()
-      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(params[key])}"`)
-      .join(', ');
-
-    // Build tweet body with optional media
-    const tweetBody = {
-      text: finalTweet
-    };
-
-    if (mediaId) {
-      tweetBody.media = {
-        media_ids: [mediaId]
-      };
-    }
-
-    // Post to Twitter API v2
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(tweetBody)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`[TWITTER] ✅ Tweet posted: https://twitter.com/i/web/status/${data.data.id}`);
-      
-      // Track that we tweeted this (independent of push notifications)
-      await supabase
-        .from('sent_tweets')
-        .insert({
-          content_id: item.id,
-          content_type: item.type,
-          feed_name: item.feedName,
-          title: item.title,
-          tweet_id: data.data.id,
-          tweeted_at: new Date().toISOString()
-        });
-    } else {
-      const error = await response.text();
-      console.error('[TWITTER] Failed to post:', error);
-    }
-
-  } catch (error) {
-    console.error('[TWITTER] Error:', error);
-    // Don't throw - continue even if Twitter fails
-  }
-}
 
 // ============================================================================
 // FACEBOOK PAGE POSTING
@@ -328,21 +117,15 @@ async function sendPushNotifications(newContent) {
   
   console.log(`[PUSH] Processing ${newContent.length} items`);
 
-  // Track if we've tweeted/posted in this run (only post once per cron run = ~every 15 min)
-  let hasPostedToTwitter = false;
   let hasPostedToFacebook = false;
 
-  // ── Facebook & Twitter run FIRST, independently of push subscribers ──
+  // ── Facebook runs FIRST, independently of push subscribers ──
   for (const item of newContent) {
     if (!hasPostedToFacebook) {
       await postToFacebook(item);
       hasPostedToFacebook = true;
+      break;
     }
-    if (!hasPostedToTwitter && item.type !== 'article') {
-      await postToTwitter(item);
-      hasPostedToTwitter = true;
-    }
-    if (hasPostedToFacebook && hasPostedToTwitter) break;
   }
 
   for (const item of newContent) {
@@ -491,7 +274,7 @@ async function sendPushNotifications(newContent) {
           ignoreDuplicates: true
         });
 
-      // Twitter & Facebook are handled in the pre-loop above (independent of subscribers)
+      // Facebook is handled in the pre-loop above (independent of subscribers)
 
     } catch (error) {
       console.error(`[PUSH] Error for ${item.feedName}:`, error);
