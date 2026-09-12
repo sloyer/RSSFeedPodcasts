@@ -332,6 +332,19 @@ async function sendPushNotifications(newContent) {
   let hasPostedToTwitter = false;
   let hasPostedToFacebook = false;
 
+  // ── Facebook & Twitter run FIRST, independently of push subscribers ──
+  for (const item of newContent) {
+    if (!hasPostedToFacebook) {
+      await postToFacebook(item);
+      hasPostedToFacebook = true;
+    }
+    if (!hasPostedToTwitter && item.type !== 'article') {
+      await postToTwitter(item);
+      hasPostedToTwitter = true;
+    }
+    if (hasPostedToFacebook && hasPostedToTwitter) break;
+  }
+
   for (const item of newContent) {
     try {
       // Check if already sent
@@ -478,27 +491,7 @@ async function sendPushNotifications(newContent) {
           ignoreDuplicates: true
         });
 
-      // Tweet ONLY THE FIRST (newest) non-article item per cron run
-      // Articles link to external sites so deep links don't add value
-      if (!hasPostedToTwitter && item.type !== 'article') {
-        await postToTwitter(item);
-        hasPostedToTwitter = true;
-        console.log('[TWITTER] Posted newest item, skipping rest to avoid spam');
-      } else if (item.type === 'article') {
-        console.log(`[TWITTER] Skipping article "${item.title.substring(0, 40)}..."`);
-      } else {
-        console.log(`[TWITTER] Skipping "${item.title.substring(0, 40)}..." (rate limited)`);
-      }
-
-      // Facebook: post the FIRST (newest) item per cron run — all content types allowed
-      // Uses item.url so FB unfurls the real thumbnail + title from the source page
-      if (!hasPostedToFacebook) {
-        await postToFacebook(item);
-        hasPostedToFacebook = true;
-        console.log('[FACEBOOK] Posted newest item, skipping rest to avoid spam');
-      } else {
-        console.log(`[FACEBOOK] Skipping "${item.title.substring(0, 40)}..." (already posted this run)`);
-      }
+      // Twitter & Facebook are handled in the pre-loop above (independent of subscribers)
 
     } catch (error) {
       console.error(`[PUSH] Error for ${item.feedName}:`, error);
