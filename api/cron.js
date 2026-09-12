@@ -87,6 +87,11 @@ async function postToFacebook(item) {
       access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN
     };
 
+    // Explicitly set thumbnail when we have one (ensures image shows even if OG tags are missing)
+    if (item.image) {
+      body.picture = item.image;
+    }
+
     const res = await fetch(
       `https://graph.facebook.com/v21.0/${process.env.FACEBOOK_PAGE_ID}/feed`,
       {
