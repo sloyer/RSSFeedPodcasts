@@ -16,8 +16,10 @@ const TOKEN    = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
 function isRecent(dateString) {
   const d = new Date(dateString);
-  // Only consider content from the last 2 hours (buffer for cron gaps)
-  return d > new Date(Date.now() - 2 * 60 * 60 * 1000);
+  // 12-hour window — wide enough to catch same-day content even if the cron
+  // had a gap or content was published before a deployment went live.
+  // Dedup via sent_fb_posts ensures nothing is posted twice.
+  return d > new Date(Date.now() - 12 * 60 * 60 * 1000);
 }
 
 async function alreadyPosted(contentId, feedName) {
@@ -32,10 +34,10 @@ async function alreadyPosted(contentId, feedName) {
 
 
 async function postToFacebook(item) {
-  if (!PAGE_ID || !TOKEN) return;
+  if (!PAGE_ID || !TOKEN) return false;
   if (await alreadyPosted(item.id, item.feedName)) {
     console.log(`[FB] Already posted: ${item.title.substring(0, 40)}`);
-    return;
+    return false;
   }
 
   const rawDesc = item.description || '';
@@ -75,9 +77,11 @@ async function postToFacebook(item) {
       fb_post_id: data.id,
       posted_at: new Date().toISOString()
     });
+    return true;
   } else {
     const err = await res.text();
     console.error(`[FB] ❌ Failed (${res.status}): ${err.substring(0, 200)}`);
+    return false;
   }
 }
 
@@ -139,12 +143,15 @@ export default async function handler(req, res) {
 
   console.log(`[FB] Found ${newContent.length} recent items to check`);
 
-  // Post everything new — no per-cycle cap, runs every 5 min so volume is naturally low
+  // Post up to 5 NEW items per cycle — prevents flooding when catching up on
+  // missed content. Already-posted items don't count toward the cap.
+  // Each item only ever posts once (dedup via sent_fb_posts).
   let posted = 0;
   for (const item of newContent) {
+    if (posted >= 5) break;
     try {
-      await postToFacebook(item);
-      posted++;
+      const didPost = await postToFacebook(item);
+      if (didPost) posted++;
     } catch (e) {
       console.error('[FB] Post error:', e.message);
     }
