@@ -30,91 +30,6 @@ async function alreadyPosted(contentId, feedName) {
   return !!data;
 }
 
-async function storiesTodayCount() {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const { count } = await supabase
-    .from('sent_fb_posts')
-    .select('id', { count: 'exact', head: true })
-    .eq('content_type', 'story')
-    .gte('posted_at', startOfDay.toISOString());
-  return count || 0;
-}
-
-async function postStoryToFacebook(item) {
-  if (!PAGE_ID || !TOKEN) return;
-
-  const storyContentId = `story_${item.id}`;
-  if (await alreadyPosted(storyContentId, item.feedName)) {
-    console.log(`[FB STORY] Already posted story for: ${item.title.substring(0, 40)}`);
-    return;
-  }
-
-  try {
-    // ── Step 1: Generate a proper 9:16 story card PNG via our story-card endpoint ──
-    // This burns the thumbnail, title, and credit into a portrait-format image.
-    const params = new URLSearchParams({
-      title:  item.title.substring(0, 100),
-      image:  item.image || '',
-      credit: `Via: ${item.feedName}`
-    });
-    const cardUrl = `${API_BASE}/api/story-card?${params.toString()}`;
-    console.log(`[FB STORY] Generating card: ${cardUrl.substring(0, 120)}`);
-
-    const cardRes = await fetch(cardUrl, { signal: AbortSignal.timeout(15000) });
-    if (!cardRes.ok) {
-      console.error(`[FB STORY] ❌ Card generation failed: HTTP ${cardRes.status}`);
-      return;
-    }
-    const cardBuffer = Buffer.from(await cardRes.arrayBuffer());
-
-    // ── Step 2: Upload the PNG bytes to Facebook (multipart, unpublished) ──
-    const form = new FormData();
-    form.append('source', new Blob([cardBuffer], { type: 'image/png' }), 'story.png');
-    form.append('published', 'false');
-    form.append('access_token', TOKEN);
-
-    const uploadRes = await fetch(
-      `https://graph.facebook.com/v21.0/${PAGE_ID}/photos`,
-      { method: 'POST', body: form }
-    );
-    const uploadData = await uploadRes.json();
-    if (!uploadData.id) {
-      console.error(`[FB STORY] ❌ Photo upload failed:`, JSON.stringify(uploadData).substring(0, 200));
-      return;
-    }
-
-    // ── Step 3: Create the story using the uploaded photo ID ──
-    const storyRes = await fetch(
-      `https://graph.facebook.com/v21.0/${PAGE_ID}/photo_stories`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          photo_id: uploadData.id,
-          access_token: TOKEN
-        })
-      }
-    );
-    const storyData = await storyRes.json();
-
-    if (storyRes.ok && storyData.success) {
-      console.log(`[FB STORY] ✅ Posted story for: ${item.title.substring(0, 50)}`);
-      await supabase.from('sent_fb_posts').insert({
-        content_id: storyContentId,
-        content_type: 'story',
-        feed_name: item.feedName,
-        title: item.title,
-        fb_post_id: uploadData.id,
-        posted_at: new Date().toISOString()
-      });
-    } else {
-      console.error(`[FB STORY] ❌ Story creation failed:`, JSON.stringify(storyData).substring(0, 200));
-    }
-  } catch (e) {
-    console.error('[FB STORY] Error:', e.message);
-  }
-}
 
 async function postToFacebook(item) {
   if (!PAGE_ID || !TOKEN) return;
@@ -224,10 +139,9 @@ export default async function handler(req, res) {
 
   console.log(`[FB] Found ${newContent.length} recent items to check`);
 
-  // Feed posts — up to 3 per cycle
+  // Post everything new — no per-cycle cap, runs every 5 min so volume is naturally low
   let posted = 0;
   for (const item of newContent) {
-    if (posted >= 3) break;
     try {
       await postToFacebook(item);
       posted++;
@@ -236,23 +150,5 @@ export default async function handler(req, res) {
     }
   }
 
-  // Stories — videos and podcasts only, 10/day cap
-  let storiesPosted = 0;
-  const storiesAlreadyToday = await storiesTodayCount();
-  const storiesRemaining = Math.max(0, 10 - storiesAlreadyToday);
-
-  if (storiesRemaining > 0) {
-    const storyEligible = newContent.filter(i => i.type === 'video' || i.type === 'podcast');
-    for (const item of storyEligible) {
-      if (storiesPosted >= storiesRemaining) break;
-      try {
-        await postStoryToFacebook(item);
-        storiesPosted++;
-      } catch (e) {
-        console.error('[FB STORY] Error:', e.message);
-      }
-    }
-  }
-
-  return res.status(200).json({ checked: newContent.length, posted, stories_posted: storiesPosted });
+  return res.status(200).json({ checked: newContent.length, posted });
 }
