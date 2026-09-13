@@ -77,11 +77,11 @@ async function postToFacebook(item) {
       fb_post_id: data.id,
       posted_at: new Date().toISOString()
     });
-    return true;
+    return { ok: true };
   } else {
     const err = await res.text();
     console.error(`[FB] ❌ Failed (${res.status}): ${err.substring(0, 200)}`);
-    return false;
+    return { ok: false, status: res.status, error: err.substring(0, 500) };
   }
 }
 
@@ -147,20 +147,21 @@ export default async function handler(req, res) {
   // Post up to 5 NEW items per cycle — prevents flooding when catching up on
   // missed content. Already-posted items don't count toward the cap.
   // Each item only ever posts once (dedup via sent_fb_posts).
+  // Test just the first item so we can see the exact Facebook error
   let posted = 0;
-  for (const item of newContent) {
-    if (posted >= 5) break;
+  const errors = [];
+  for (const item of newContent.slice(0, 3)) {
     try {
-      const didPost = await postToFacebook(item);
-      if (didPost) posted++;
+      const result = await postToFacebook(item);
+      if (result?.ok) {
+        posted++;
+      } else {
+        errors.push({ item: item.title?.substring(0, 40), ...result });
+      }
     } catch (e) {
-      console.error('[FB] Post error:', e.message);
+      errors.push({ item: item.title?.substring(0, 40), error: e.message });
     }
   }
 
-  const summary = newContent.map(i => ({
-    id: i.id, type: i.type, feedName: i.feedName,
-    title: i.title?.substring(0, 50), isRecent: true
-  }));
-  return res.status(200).json({ checked: newContent.length, posted, items: summary });
+  return res.status(200).json({ checked: newContent.length, posted, errors });
 }
