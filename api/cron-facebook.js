@@ -18,6 +18,23 @@ const API_BASE = 'https://rss-feed-podcasts.vercel.app';
 const PAGE_ID  = process.env.FACEBOOK_PAGE_ID;
 const TOKEN    = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
+function isShort(video) {
+  // Skip YouTube Shorts: duration ≤ 60s OR #shorts in title/description
+  const title = (video.title || '').toLowerCase();
+  const desc  = (video.description || '').toLowerCase();
+  if (title.includes('#shorts') || desc.includes('#shorts')) return true;
+  // duration is ISO 8601 (e.g. "PT58S", "PT1M2S") — parse seconds
+  const dur = video.duration || '';
+  const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (match) {
+    const secs = (parseInt(match[1] || 0) * 3600)
+               + (parseInt(match[2] || 0) * 60)
+               + (parseInt(match[3] || 0));
+    if (secs > 0 && secs <= 60) return true;
+  }
+  return false;
+}
+
 function isRecent(dateString) {
   const d = new Date(dateString);
   // 12-hour window — catches same-day content even across deployments/gaps.
@@ -133,16 +150,18 @@ export default async function handler(req, res) {
     const vr = await fetch(`${API_BASE}/api/youtube?limit=50&days=1`);
     const vd = await vr.json();
     if (vd.success && vd.data) {
-      vd.data.filter(v => isRecent(v.publishedAt)).forEach(v => {
-        newContent.push({
-          id: String(v.id),
-          feedName: v.channelName,
-          type: 'video',
-          title: v.title,
-          url: v.watchUrl,
-          description: v.description || ''
+      vd.data
+        .filter(v => isRecent(v.publishedAt) && !isShort(v))
+        .forEach(v => {
+          newContent.push({
+            id: String(v.id),
+            feedName: v.channelName,
+            type: 'video',
+            title: v.title,
+            url: v.watchUrl,
+            description: v.description || ''
+          });
         });
-      });
     }
   } catch (e) { console.error('[FB] Videos error:', e.message); }
 
