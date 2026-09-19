@@ -133,10 +133,6 @@
       "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/cron-facebook",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron-inactive-reminder",
       "schedule": "0 21 * * *"
     },
